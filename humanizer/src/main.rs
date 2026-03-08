@@ -12,6 +12,16 @@ pub fn humanized_size(mut size: u64) -> (f64, &'static str)
 
     (size_f, units[index])
 }
+
+fn main()
+{
+    let byte_size = 1554056;
+    let (size, unit) = humanized_size(byte_size);
+
+    println!("转换结果： Size : {:.4} {}", size, unit);
+}
+
+
 #[cfg(test)]  //用于条件编译，只有在cargo test 运行测试时，才编译下面的模块。
 mod tests //内部子模块
 {
