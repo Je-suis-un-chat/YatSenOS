@@ -1,0 +1,14 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   0.030878242s  INFO prepare_target{force=false package_id=colored_output v0.1.0 (/home/je-suis-un-chat/YatSenOS/colored_output) target="colored_output"}: cargo::core::compiler::fingerprint: dependency on `lazy_static` is newer than we are 1773078059.921450755s > 1773078059.917450756s "/home/je-suis-un-chat/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/colored-2.2.0"
+   0.032045407s  INFO prepare_target{force=false package_id=colored_output v0.1.0 (/home/je-suis-un-chat/YatSenOS/colored_output) target="colored_output"}: cargo::core::compiler::fingerprint: fingerprint dirty for colored_output v0.1.0 (/home/je-suis-un-chat/YatSenOS/colored_output)/Check { test: false }/TargetInner { name: "colored_output", doc: true, ..: with_path("/home/je-suis-un-chat/YatSenOS/colored_output/src/main.rs", Edition2024) }
+   0.032083995s  INFO prepare_target{force=false package_id=colored_output v0.1.0 (/home/je-suis-un-chat/YatSenOS/colored_output) target="colored_output"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { name: "colored" })
+   0.032850126s  INFO prepare_target{force=false package_id=colored v2.2.0 target="colored"}: cargo::core::compiler::fingerprint: fingerprint dirty for colored v2.2.0/Check { test: false }/TargetInner { ..: lib_target("colored", ["lib"], "/home/je-suis-un-chat/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/colored-2.2.0/src/lib.rs", Edition2021) }
+   0.032891490s  INFO prepare_target{force=false package_id=colored v2.2.0 target="colored"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDependency { name: "lazy_static", dep_mtime: FileTime { seconds: 1773078059, nanos: 921450755 }, max_mtime: FileTime { seconds: 1773078059, nanos: 917450756 } })
+   0.033887450s  INFO prepare_target{force=false package_id=colored_output v0.1.0 (/home/je-suis-un-chat/YatSenOS/colored_output) target="colored_output"}: cargo::core::compiler::fingerprint: fingerprint dirty for colored_output v0.1.0 (/home/je-suis-un-chat/YatSenOS/colored_output)/Check { test: true }/TargetInner { name: "colored_output", doc: true, ..: with_path("/home/je-suis-un-chat/YatSenOS/colored_output/src/main.rs", Edition2024) }
+   0.033927020s  INFO prepare_target{force=false package_id=colored_output v0.1.0 (/home/je-suis-un-chat/YatSenOS/colored_output) target="colored_output"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { name: "colored" })
+    Checking colored v2.2.0
+    Checking colored_output v0.1.0 (/home/je-suis-un-chat/YatSenOS/colored_output)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.57s
