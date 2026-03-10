@@ -38,7 +38,7 @@
 ```
 2.使用系统包管理器安装依赖
 #figure(
-  image("a09cf86102ce557acf9c8c8575a75fa9.png", width: 70%),
+  image("screenshop1.png", width: 70%),
   caption: [验证相关软件包的版本]
 )
 
@@ -65,5 +65,5 @@
 ```bash cargo --version```  
 
 #figure(
-  image("aaf4a818298f1f0720fc2e53922460d8.png", width: 70%),
+  image("screenshop2.png", width: 70%),
 )
