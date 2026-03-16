@@ -153,7 +153,7 @@ fn test_unique_id() {
   image("screenshop2.png", width: 70%),
 )
 
-=== 尝试使用 Rust 进行编程
+== 尝试使用 Rust 进行编程
 
     这部分要完成五份代码，我通过学习文档和与大模型对话掌握了rust的基本语法并完成了这部分任务。
     
@@ -200,10 +200,28 @@ fn test_unique_id() {
 通过任务五，我了解了rust的元组结构体----只有一个类型包裹着的结构体，和全局状态量static----储存在程序固定的内存区域，贯穿程序整个生命周期。
 而AtomicU16可以保证每一次获取的值都各不相同。
 
-=== 运行UEFI Shell
-==== 初始化你的仓库
+== 运行UEFI Shell
+=== 概念学习
+由于这部分内容涉及到很多不认识没见过的名词，所以在任务开始前，我先通过网络搜索和于大模型对话的方式，了解了一些基本概念，笔记如下:
+==== UEFI
+UEFI , 即统一可扩展固件接口，是操作系统和固件之间的接口，它提供了启动操作系统或运行预启动程序的标准环境。它支持多种操作系统的加载，如 Windows、Linux 等。在实验文档的
+上下文中，UEFI Shell 是一个基于 UEFI 的命令行工具，它允许我们在 UEFI 环境中执行一些简单的操作，例如查看硬件信息、启动操作系统等。
+==== QEMU
+QEMU 是一个开源的托管虚拟机软件，它可以模拟各种硬件平台和设备，使得一台电脑能模拟运行另一台完全不同的电脑系统，它主要有以下两大核心功能：
+
+1.全系统模拟：
+
+在这个模式下，QEMU会模拟一整套硬件，包括 CPU、内存、硬盘和网卡。这使得用户可以在一个物理机上运行另一个操作系统，就像在真实硬件上一样。
+
+2.用户模式模拟：
+
+在这个模式下，QEMU 只模拟用户空间的程序，而不模拟整个系统。这使得用户可以在一个平台上运行另一个平台的应用程序，例如在 x86 上运行 ARM 程序。
+==== OVMF
+OVMF 是一个开源的 UEFI 固件实现，它允许我们在 QEMU 中模拟 UEFI 环境。通过使用 OVMF，我们可以在 QEMU 中启动 UEFI Shell，并进行一些基本的操作，例如查看硬件信息、启动操作系统等。
+
+=== 初始化你的仓库
 首先将实验仓库克隆到本地，然后参考实验0x00代码的文件结构，初始化我的仓库。
-==== 使用 QEMU 启动 UEFI Shell
+=== 使用 QEMU 启动 UEFI Shell
 UEFI Shell 是一个基于 UEFI 的命令行工具，它可以让我们在 UEFI 环境下进行一些简单的操作。
 
 在不挂载任何硬盘的情况下，我们可以使用如下命令启动 UEFI Shell：
@@ -211,3 +229,101 @@ UEFI Shell 是一个基于 UEFI 的命令行工具，它可以让我们在 UEFI 
 ```bash
 qemu-system-x86_64 -bios ./assets/OVMF.fd -net none -nographic
 ```
+
+#figure(
+  image("UEFI Shell.png", width: 70%))
+
+命令参数解释：
+
+```bash qemu-system-x86_64```：指定使用 QEMU 模拟 x86_64 架构的系统。
+
+```-bios ./assets/OVMF.fd```：指定使用 OVMF 固件文件作为 BIOS，这个文件提供了 UEFI 环境。
+
+```-net none```：禁用网络功能。
+
+```-nographic```：禁用图形输出，使用命令行界面。
+
+== YSOS 启动 !
+
+=== 配置 Rust ToolChain
+
+由于仓库提供的 rust-toolchain.toml 已经指定了需要使用的 Rust 工具链版本，只需要将这个文件放在项目根目录下，运行 cargo build 就会自动下载并使用指定的工具链。
+
+=== 运行第一个 UEFI 程序
+
+在 crates/boot/src/main.rs 中，完善示例代码，修改注释部分，完整代码如下：
+
+```rs
+#![no_std]
+#![no_main]
+
+#[macro_use]
+extern crate log;
+extern crate alloc;
+
+use core::arch::asm;
+use uefi::{Status, entry};
+
+#[entry]
+fn efi_main() -> Status {
+    uefi::helpers::init().expect("Failed to initialize utilities");
+    log::set_max_level(log::LevelFilter::Info);
+
+    let std_num = 24312063;
+
+    loop {
+        info!("Hello World from UEFI bootloader! @ {}", std_num);
+
+        for _ in 0..0x10000000 {
+            unsafe {
+                asm!("nop");
+            }
+        }
+    }
+}
+```
+由于本人初学rust，所以需要对这份简单代码进行分析，笔记如下：
+
+1. ```#![no_std]``` 和 ```#![no_main]``` 是 Rust 的属性宏，分别表示不使用标准库和不使用默认的 main 函数作为程序入口点。这在操作系统开发中很常见，因为我们需要直接控制底层硬件，而不依赖于标准库提供的功能。
+2. ```#[macro_use] extern crate log;``` 和 ```extern crate alloc;``` 是引入外部 crate 的语句，分别引入了日志库和分配器库。这些库提供了日志记录和内存分配的功能，在操作系统开发中非常有用。
+3. ```use core::arch::asm;``` 引入了 Rust 的内联汇编功能，允许我们在 Rust 代码中直接编写汇编指令。
+4. ```use uefi::{Status, entry};``` 引入了 UEFI crate 中的 Status 类型和 entry 宏，Status 用于表示函数的返回状态，而 entry 宏用于定义程序的入口点。
+5. ```#[entry] fn efi_main() -> Status { ... }``` 定义了程序的入口函数 efi_main，这个函数会在 UEFI 环境下被调用。函数返回一个 Status 类型的值，表示函数执行的结果。
+6. 在 efi_main 函数中，首先调用了 ```uefi::helpers::init()``` 来初始化 UEFI 的实用工具，如果初始化失败会 panic 并输出错误信息。 接着设置了日志级别为 Info。
+7. 定义了一个变量 std_num，赋值为我的学号 24312063。
+8. 进入一个无限循环，在循环中使用 ```info!``` 宏输出一条日志消息，包含 "Hello World from UEFI bootloader!" 和我的学号。然后通过一个大循环来创建一个延迟，使用内联汇编的 nop 指令来占用 CPU 时间，防止程序过快地输出日志消息。 
+得到如下期望输出：
+#figure(
+  image("run code.png", width: 100%)
+)
+
+至此，我已经做好了编写OS的准备工作。
+
+= 思考题
+
+== 了解现代操作系统（Windows）的启动过程，UEFI 和 Legacy（BIOS）的区别是什么？
+
+答:UEFI（统一可扩展固件接口）和 Legacy BIOS（基本输入输出系统）是两种不同的计算机启动固件接口。它们之间的主要区别如下：
+
+==- 启动方式：Legacy BIOS 使用 MBR（主引导记录）分区方案，而 UEFI 使用 GPT（GUID 分区表）分区方案。UEFI 支持更大的硬盘和更多的分区。
+
+- 启动速度：UEFI 启动速度通常比 Legacy BIOS 快，因为它使用更现代的启动机制和更高效的代码。
+
+- 安全性：UEFI 支持 Secure Boot（安全启动），可以防止未经授权的操作系统和驱动程序加载，提高系统安全性。Legacy BIOS 没有这种功能。
+
+- 用户界面：UEFI 通常提供更友好的图形用户界面，而 Legacy BIOS 主要是基于文本的界面。
+
+== 尝试解释 Makefile 中的命令做了哪些事情？或许你可以参考下列命令来得到更易读的解释：
+```bash
+python ysos.py run --dry-run
+```
+答:这个命令是使用 Python 运行一个名为 ysos.py 的脚本，并传递了两个参数：run 和 --dry-run。
+- run 参数可能是告诉脚本执行某个特定的操作，可能是运行一个程序或者执行某个任务。
+- --dry-run 参数通常用于模拟执行命令而不实际执行它。这意味着脚本会显示它将要执行的操作，但不会真正执行任何更改。这对于测试和验证命令的正确性非常有用，可以帮助用户了解命令的效果而不冒风险。
+== 利用 cargo 的包管理和 docs.rs 的文档，我们可以很方便的使用第三方库。这些库的源代码在哪里？它们是什么时候被编译的？
+
+答:第三方库的源代码通常托管在 GitHub 或其他代码托管平台上。当我们使用 cargo 来添加依赖时，cargo 会从 crates.io（Rust 的包注册中心）下载库的源代码，并将其存储在本地的 cargo 缓存目录中（通常位于 ~/.cargo/registry/src/）。这些库是在我们第一次构建项目时被编译的，或者当我们更新依赖时重新编译。编译后的库文件会被存储在 target 目录下的 debug 或 release 文件夹中，具体取决于我们使用的是 debug 模式还是 release 模式。
+
+== 为什么我们需要使用 #[entry] 而不是直接使用 main 函数作为程序的入口？
+
+答:在 Rust 中，#[entry] 是一个属性宏，用于指定程序的入口点。我们需要使用 #[entry] 而不是直接使用 main 函数作为程序的入口，是因为在某些环境（如嵌入式系统或操作系统开发）中，main 函数可能不适合作为入口点。#[entry] 允许我们定义一个自定义的入口函数，这个函数可以根据特定的环境需求进行配置和初始化，而不受 main 函数的限制。这对于操作系统开发来说尤其重要，因为我们可能需要在程序启动时执行一些特定的初始化步骤，而这些步骤可能不适合放在 main 函数中。
