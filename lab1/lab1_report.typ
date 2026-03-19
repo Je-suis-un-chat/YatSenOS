@@ -136,3 +136,150 @@ gcc main.c -c -o main.o && ld main.o -T ./script.ld -o main
 4. 安全加固
 
 通过控制ELF结构，可以将敏感代码和数据放在特定的section中，并设置适当的权限（如只读、不可执行等），从而提高系统的安全性。
+
+=== 步骤二：编译内核ELF
+按照实验文档，我在 crates/kernel 目录下运行了 ```rt cargo build --release ```,但是出现了几个问题导致编译失败，我排查了这些报错并逐一解决。最后完成了这部分任务。
+==== 问题一：找不到全局内存分配器
+在普通应用程序里，如果想用动态内存，底层会自动调用操作系统的 ```rt malloc ```和```rt free```。但是，由于我正在写操作系统内核本身，(```rt #![no_std]```环境)，我的代码底下并没有另一个操作系统来提供```rt malloc```。当我引入了相关核心库时，Rust编译器就会要求指定分配内存的负责人。如果没有，编译器就会拒绝编译。
+
+于是，就有如下报错信息：
+```bash
+error: no global memory allocator found but one is required; link to std or add
+ #[global_allocator] to a static item that implements the GlobalAlloc trait
+```
+
+为了解决这个问题，我在 kernel/src/main.rs 文件最下方添加了代码：
+
+```rs
+struct DummyAllocator;
+
+unsafe impl core::alloc::GlobalAlloc for DummyAllocator {
+    unsafe fn alloc(&self, _layout: core::alloc::Layout) -> *mut u8 {
+        core::ptr::null_mut()
+    }
+
+    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: core::alloc::Layout) {}
+}
+
+#[global_allocator]
+static ALLOCATOR: DummyAllocator = DummyAllocator;
+```
+这段代码给程序添加了一个名为```rt DummyAllocator```的伪分配器，满足了编译条件。
+
+==== 问题二：命令参数缺失
+在运行这个命令时，报了如下错误：
+#figure(
+  image("./img/error2.png", width: 70%),
+)
+按照提示，我直接在命令后面添加相应参数即可解决：
+
+```bash
+cargo +nightly build --release -Z build-std -Z json-target-spec
+```
+
+==== 问题三：Cargo 依赖下载网络失败
+在拉取 crates.io 索引时，频繁报出如下错误信息：
+
+```bash
+(base) je-suis-un-chat@LAPTOP-MAGCR3QA:~/YatSenOS/lab1/crates/kernel$ cargo build --release -Z json-target-spec
+   Updating `rsproxy-sparse` index
+   Locking 30 packages to latest Rust 1.96.0-nightly compatible versions
+warning: spurious network error (2 tries remaining): [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading)
+etwork error (2 tries remaining): [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading)
+error: failed to download from `https://rsproxy.cn/api/v1/crates/x86/0.52.0/download`
+Caused by:warning: spurious network error (2 tries remaining): [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading)
+warning: spurious network error (2 tries remaining): [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading)
+warning: spurious network error (2 tries remaining): [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading)
+warning: spurious n
+  [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading)
+```
+为了解决这个问题，我在 config.toml 文件下添加了清华大学的镜像源：
+
+```toml
+[source.crates-io]
+replace-with = 'tuna'
+
+[source.tuna]
+registry = "https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git"
+
+[net]
+git-fetch-with-cli = true
+```
+但是还是出现了如下报错：
+
+```bash
+(base) je-suis-un-chat@LAPTOP-MAGCR3QA:~/YatSenOS/lab1/crates/kernel$ cargo update
+Updating `tuna` index
+warning: spurious network error (3 tries remaining): [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading); class=Net (12)
+warning: spurious network error (2 tries remaining): [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading); class=Net (12)
+warning: spurious network error (1 try remaining): [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading); class=Net (12)
+error: failed to get `arrayvec` as a dependency of package `ysos_boot v0.1.0 (/home/je-suis-un-chat/YatSenOS/lab1/crates/boot)`
+
+Caused by:
+failed to load source for dependency `arrayvec`
+
+Caused by:
+unable to update registry `crates-io`
+
+Caused by:
+failed to update replaced source registry `crates-io`
+
+Caused by:
+failed to fetch `https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git`
+
+Caused by:
+network failure seems to have happened
+if a proxy or similar is necessary `net.git-fetch-with-cli` may help here
+https://doc.rust-lang.org/cargo/reference/config.html#netgit-fetch-with-cli
+
+Caused by:
+[35] SSL connect error (Send failure: Broken pipe); class=Net (12)
+(base) je-suis-un-chat@LAPTOP-MAGCR3QA:~/YatSenOS/lab1/crates/kernel$
+```
+
+这是因为我使用的清华源还在用旧的 Git 协议，由于网络环境或 SSL 证书问题，握手时发生了 ```bashBroken pipe```。
+
+为了解决这个问题，我在 config.toml 文件中添加了一行配置：
+
+```toml
+[net]
+git-fetch-with-cli = true
+```
+改用 Ubuntu 系统自带的 git 命令行工具来解决 SSL 错误。
+
+我还调整了全局 Git 配置，让它能适配我的清华源：
+
+```bash
+# 增加 Git 的网络缓冲区大小（防止大文件传输中断）
+git config --global http.postBuffer 524288000
+
+# 如果是因为 SSL 证书链验证问题（常见于校园网或公司内网代理），可以临时关闭验证
+git config --global http.sslVerify false
+
+# 设置低速连接不超时（防止在索引更新慢时断开）
+git config --global http.lowSpeedLimit 0
+git config --global http.lowSpeedTime 999999
+```
+
+在再次执行命令前，彻底清空代理：
+
+```bash 
+unset http_proxy
+unset https_proxy
+unset ALL_PROXY
+cargo update
+```
+最终解决了这个网络问题。
+
+解决了上述三个问题后，我的 ELF 内核终于编译成功了。
+
+=== 步骤三：找到编译产物并用命令查看其基本信息
+
+使用 ```bashreadelf```命令查看编译产物基本信息：
+
+#figure(
+  image("img/readelf_l.png", width: 120%),
+)
+#figure(
+  image("img/readelf_h.png", width: 120%),
+)
