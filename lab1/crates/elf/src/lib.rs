@@ -54,7 +54,6 @@ pub fn map_range(
         count
     );
 
-    // default flags for stack
     let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
 
     for page in Page::range(range_start, range_end) {
@@ -68,34 +67,22 @@ pub fn map_range(
         }
     }
 
-    trace!(
-        "Map hint: {:#x} -> {:#x}",
-        addr,
-        page_table
-            .translate_page(range_start)
-            .unwrap()
-            .start_address()
-    );
-
     Ok(Page::range(range_start, range_end))
 }
 
 /// Load & Map ELF file
-///
-/// load segments in ELF file to new frames and set page table
 pub fn load_elf(
     elf: &ElfFile,
     physical_offset: u64,
     page_table: &mut impl Mapper<Size4KiB>,
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
 ) -> Result<(), MapToError<Size4KiB>> {
-    trace!("Loading ELF file...{:?}", elf.input.as_ptr());
+    trace!("Loading ELF file...");
 
     for segment in elf.program_iter() {
         if segment.get_type().unwrap() != program::Type::Load {
             continue;
         }
-
         load_segment(elf, physical_offset, &segment, page_table, frame_allocator)?
     }
 
@@ -103,8 +90,6 @@ pub fn load_elf(
 }
 
 /// Load & Map ELF segment
-///
-/// load segment to new frame and set page table
 fn load_segment(
     elf: &ElfFile,
     physical_offset: u64,
@@ -112,90 +97,66 @@ fn load_segment(
     page_table: &mut impl Mapper<Size4KiB>,
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
 ) -> Result<(), MapToError<Size4KiB>> {
-    trace!("Loading & mapping segment: {:#x?}", segment);
-
+    let virt_start_addr = VirtAddr::new(segment.virtual_addr());
     let mem_size = segment.mem_size();
     let file_size = segment.file_size();
-    let file_offset = segment.offset() & !0xfff;
-    let virt_start_addr = VirtAddr::new(segment.virtual_addr());
+    let file_offset = segment.offset();
 
+    // 1. 确定权限位
     let mut page_table_flags = PageTableFlags::PRESENT;
+    if segment.flags().is_write() {
+        page_table_flags |= PageTableFlags::WRITABLE;
+    }
+    if !segment.flags().is_execute() {
+        page_table_flags |= PageTableFlags::NO_EXECUTE;
+    }
 
-    // FIXME: handle page table flags with segment flags
-    unimplemented!("Handle page table flags with segment flags!");
+    trace!("Mapping segment at {:?} with flags {:?}", virt_start_addr, page_table_flags);
 
-    trace!("Segment page table flag: {:?}", page_table_flags);
-
+    // 2. 计算涉及的页面范围（按 4KiB 对齐）
     let start_page = Page::containing_address(virt_start_addr);
-    let end_page = Page::containing_address(virt_start_addr + file_size - 1u64);
+    let end_page = Page::containing_address(virt_start_addr + mem_size - 1u64);
     let pages = Page::range_inclusive(start_page, end_page);
 
-    let data = unsafe { elf.input.as_ptr().add(file_offset as usize) };
+    let data_src = unsafe { elf.input.as_ptr().add(file_offset as usize) };
 
     for (idx, page) in pages.enumerate() {
+        // 申请物理帧
         let frame = frame_allocator
             .allocate_frame()
             .ok_or(MapToError::FrameAllocationFailed)?;
 
-        let offset = idx as u64 * page.size();
-        let count = if file_size - offset < page.size() {
-            file_size - offset
-        } else {
-            page.size()
-        };
-
+        // 建立映射
         unsafe {
-            copy_nonoverlapping(
-                data.add(idx * page.size() as usize),
-                (frame.start_address().as_u64() + physical_offset) as *mut u8,
-                count as usize,
-            );
-
             page_table
                 .map_to(page, frame, page_table_flags, frame_allocator)?
                 .flush();
-
-            if count < page.size() {
-                // zero the rest of the page
-                trace!(
-                    "Zeroing rest of the page: {:#x}",
-                    page.start_address().as_u64()
-                );
-                write_bytes(
-                    (frame.start_address().as_u64() + physical_offset + count) as *mut u8,
-                    0,
-                    (page.size() - count) as usize,
-                );
-            }
         }
-    }
 
-    if mem_size > file_size {
-        // .bss section (or similar), which needs to be zeroed
-        let zero_start = virt_start_addr + file_size;
-        let zero_end = virt_start_addr + mem_size;
+        // 3. 拷贝数据与清零逻辑
+        // 目标地址计算：利用物理内存偏移量访问刚刚映射的物理帧
+        let dest_ptr = (frame.start_address().as_u64() + physical_offset) as *mut u8;
+        
+        // 计算当前页在段内的偏移
+        let page_offset = idx as u64 * 4096;
 
-        // Map additional frames.
-        let start_address = VirtAddr::new(align_up(zero_start.as_u64(), Size4KiB::SIZE));
-        let start_page: Page = Page::containing_address(start_address);
-        let end_page = Page::containing_address(zero_end);
-
-        for page in Page::range_inclusive(start_page, end_page) {
-            let frame = frame_allocator
-                .allocate_frame()
-                .ok_or(MapToError::FrameAllocationFailed)?;
-
-            unsafe {
-                page_table
-                    .map_to(page, frame, page_table_flags, frame_allocator)?
-                    .flush();
-
-                // zero bss section
-                write_bytes(
-                    (frame.start_address().as_u64() + physical_offset) as *mut u8,
-                    0,
-                    page.size() as usize,
+        unsafe {
+            if page_offset < file_size {
+                // 需要从文件拷贝数据的情况
+                let copy_len = core::cmp::min(file_size - page_offset, 4096);
+                copy_nonoverlapping(
+                    data_src.add(page_offset as usize),
+                    dest_ptr,
+                    copy_len as usize,
                 );
+
+                // 如果该页没填满（文件数据结束但内存段没结束），清零剩余部分
+                if copy_len < 4096 {
+                    write_bytes(dest_ptr.add(copy_len as usize), 0, (4096 - copy_len) as usize);
+                }
+            } else {
+                // 纯 BSS 部分，整页清零
+                write_bytes(dest_ptr, 0, 4096);
             }
         }
     }

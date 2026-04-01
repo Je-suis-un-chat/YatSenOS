@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(lldb) YSOS",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/esp/KERNEL.ELF",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "processCreateCommands": ["gdb-remote 1234"]
+        }
+    ]
+}
