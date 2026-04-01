@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug YatSenOS",
+            "type": "lldb",
+            "request": "custom",
+            "targetCreateCommands": [
+                // 使用 ${workspaceFolder} 指向当前 VSCode 打开的项目根目录
+                "target create ${workspaceFolder}/lab1/esp/KERNEL.ELF"
+            ],
+            "processCreateCommands": [
+                "gdb-remote localhost:1234",
+                "breakpoint set --name ysos_kernel::init",
+                "continue"
+            ]
+        }
+    ]
+}

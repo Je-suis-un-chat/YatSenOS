@@ -1,6 +1,6 @@
 // 关键点：这里的 "../" 表示“退回上一级目录”，
 // 也就是从 lab0 退回到 YatSenOS，然后再进入 base 文件夹寻找模板
-#import "/base/report.typ": *
+#import "/template/report.typ": *
 
 
 #show: report.with(
@@ -123,7 +123,7 @@ fn test_unique_id() {
 ```
 2.使用系统包管理器安装依赖
 #figure(
-  image("screenshop1.png", width: 70%),
+  image("screenshop1.png", width: 120%),
   caption: [验证相关软件包的版本]
 )
 
@@ -150,7 +150,7 @@ fn test_unique_id() {
 ```bash cargo --version```  
 
 #figure(
-  image("screenshop2.png", width: 70%),
+  image("screenshop2.png", width: 120%),
 )
 
 == 尝试使用 Rust 进行编程
@@ -231,7 +231,7 @@ qemu-system-x86_64 -bios ./assets/OVMF.fd -net none -nographic
 ```
 
 #figure(
-  image("UEFI Shell.png", width: 70%))
+  image("UEFI Shell.png", width: 120%))
 
 命令参数解释：
 
@@ -294,7 +294,7 @@ fn efi_main() -> Status {
 8. 进入一个无限循环，在循环中使用 ```info!``` 宏输出一条日志消息，包含 "Hello World from UEFI bootloader!" 和我的学号。然后通过一个大循环来创建一个延迟，使用内联汇编的 nop 指令来占用 CPU 时间，防止程序过快地输出日志消息。 
 得到如下期望输出：
 #figure(
-  image("run code.png", width: 100%)
+  image("run code.png", width: 120%)
 )
 
 至此，我已经做好了编写OS的准备工作。
