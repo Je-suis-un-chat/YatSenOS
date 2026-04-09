@@ -34,3 +34,12 @@ pub trait LocalApic {
     /// Acknowledge interrupt on the current CPU
     fn eoi(&mut self);
 }
+
+pub fn init()
+{
+    unsafe{
+        x86_64::instructions::interrupts::enable();
+    }
+
+    info!("Interrupts Enabled.Waiting for ticks...");
+}

@@ -46,3 +46,8 @@ pub enum Irq {
     Error = 19,
     Spurious = 31,
 }
+
+pub const PIC_1_OFFSET: u8 = 0x20;
+pub const TIMER_INTERRUPT_VEC: u8 = PIC_1_OFFSET;      // 0x20
+pub const KEYBOARD_INTERRUPT_VEC: u8 = PIC_1_OFFSET + 1; // 0x21
+pub const SERIAL_INTERRUPT_VEC: u8 = PIC_1_OFFSET + 4;   // 0x24 (COM1)

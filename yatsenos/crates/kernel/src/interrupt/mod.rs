@@ -1,7 +1,7 @@
 mod apic;
 mod consts;
-// mod clock;
-// mod serial;
+pub mod clock;
+mod serial;
 mod exceptions;
 
 use apic::*;
@@ -14,8 +14,8 @@ lazy_static! {
         let mut idt = InterruptDescriptorTable::new();
         unsafe {
             exceptions::register_idt(&mut idt);
-            // TODO: clock::register_idt(&mut idt);
-            // TODO: serial::register_idt(&mut idt);
+            clock::register_idt(&mut idt);
+            serial::register_idt(&mut idt);
         }
         idt
     };
@@ -25,9 +25,23 @@ lazy_static! {
 pub fn init() {
     IDT.load();
 
-    // FIXME: check and init APIC
+    unsafe {
+        //初始化本地APIC
+        //映射物理地址到虚拟地址并初始化
 
-    // FIXME: enable serial irq with IO APIC (use enable_irq)
+        let mut lapic = XApic::new(physical_to_virtual(LAPIC_ADDR));
+        lapic.cpu_init();
+
+        //启用串口中断
+        //串口COM1通常对应 IOAPIC 的 IRQ4
+        //将其路由至CPU 0(主核)
+        enable_irq(4,0);
+        
+        //启用时钟中断
+        enable_irq(0,0);
+        //开启CPU的中断响应开关
+        x86_64::instructions::interrupts::enable();
+    }
 
     info!("Interrupts Initialized.");
 }

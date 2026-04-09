@@ -35,6 +35,7 @@ launch:
 		$(QEMU_OUTPUT) \
 		-drive format=raw,file=fat:${ESP} \
 		-snapshot
+		
 
 intdbg:
 	@qemu-system-x86_64 \
@@ -55,6 +56,7 @@ debug:
 		-drive format=raw,file=fat:${ESP} \
 		-snapshot \
 		-s -S
+		-no-reboot
 
 clean:
 	@cargo clean

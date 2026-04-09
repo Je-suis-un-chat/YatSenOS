@@ -17,10 +17,11 @@ impl SerialPort {
         let mut fifo_control_port = Port::new(self.port + 2);
         let mut interrupt_enable_port = Port::new(self.port + 1);
         let mut modem_control_port = Port::new(self.port + 4);
+        let mut ier_port: Port<u8> = Port::new(0x3F8 + 1);
 
         unsafe {
-            // 1. 禁用所有中断
-            interrupt_enable_port.write(0x00u8);
+            // 1. 启用中断
+            interrupt_enable_port.write(0x01u8);
 
             // 2. 设置波特率 (115200)
             // 开启 DLAB (Divisor Latch Access Bit)
@@ -37,6 +38,8 @@ impl SerialPort {
 
             // 5. 设置调制解调器控制位 (DTR, RTS, Out2)
             modem_control_port.write(0x0Bu8);
+
+            ier_port.write(0x01); // 开启 Data Available Interrupt
         }
     }
 
@@ -85,3 +88,4 @@ impl fmt::Write for SerialPort {
         Ok(())
     }
 }
+

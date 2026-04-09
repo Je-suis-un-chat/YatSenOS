@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
-
-use boot::{BootMemoryMap, MemoryType};
+// 1. 我们不再需要导入 arrayvec
+use boot::{MemoryDescriptor, MemoryType};
 use x86_64::{
     PhysAddr,
     structures::paging::{FrameAllocator, FrameDeallocator, PhysFrame, Size4KiB},
@@ -14,8 +14,6 @@ guard_access_fn! {
 
 type BootInfoFrameIter = Box<dyn Iterator<Item = PhysFrame> + Send>;
 
-/// A FrameAllocator that returns usable frames from the bootloader's memory
-/// map.
 pub struct BootInfoFrameAllocator {
     size: usize,
     used: usize,
@@ -23,12 +21,9 @@ pub struct BootInfoFrameAllocator {
 }
 
 impl BootInfoFrameAllocator {
-    /// Create a FrameAllocator from the passed memory map.
-    ///
-    /// This function is unsafe because the caller must guarantee that the
-    /// passed memory map is valid. The main requirement is that all frames
-    /// that are marked as `USABLE` in it are really unused.
-    pub unsafe fn init(memory_map: &BootMemoryMap, size: usize) -> Self {
+    // 2. 魔法在这里：将参数改为 &'static [MemoryDescriptor] (静态切片)
+    // 当外面传入 &boot_info.memory_map (ArrayVec引用) 时，Rust 会自动把它转成切片！
+    pub unsafe fn init(memory_map: &'static [MemoryDescriptor], size: usize) -> Self {
         BootInfoFrameAllocator {
             size,
             frames: create_frame_iter(memory_map),
@@ -54,19 +49,17 @@ unsafe impl FrameAllocator<Size4KiB> for BootInfoFrameAllocator {
 
 impl FrameDeallocator<Size4KiB> for BootInfoFrameAllocator {
     unsafe fn deallocate_frame(&mut self, _frame: PhysFrame) {
-        // TODO: deallocate frame (not for lab 2)
+        // TODO: deallocate frame
     }
 }
 
-fn create_frame_iter(memory_map: &BootMemoryMap) -> BootInfoFrameIter {
+// 3. 迭代器生成函数同样接收切片
+fn create_frame_iter(memory_map: &'static [MemoryDescriptor]) -> BootInfoFrameIter {
     let iter = memory_map
-        .clone()
-        .into_iter()
-        // get usable regions from memory map
+        .iter() // 切片自带 .iter() 方法
         .filter(|r| r.ty == MemoryType::CONVENTIONAL)
-        // align to page boundary
+        // 提醒：如果后续 page_count 报错，说明官方字段名是 number_of_pages
         .flat_map(|r| (0..r.page_count).map(move |v| (v * 4096 + r.phys_start)))
-        // create `PhysFrame` types from the start addresses
         .map(|addr| PhysFrame::containing_address(PhysAddr::new(addr)));
 
     Box::new(iter)

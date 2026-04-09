@@ -36,30 +36,62 @@ impl LocalApic for XApic {
     /// If this type APIC is supported
     fn support() -> bool {
         // FIXME: Check CPUID to see if xAPIC is supported.
+        CpuId::new()
+            .get_feature_info()
+            .map(|f| f.has_apic())
+            .unwrap_or(false)
     }
 
     /// Initialize the xAPIC for the current CPU.
     fn cpu_init(&mut self) {
         unsafe {
-            // FIXME: Enable local APIC; set spurious interrupt vector.
+          // 1. 启用 Local APIC 并设置伪中断向量 (Spurious Interrupt Vector)
+            // 寄存器 0xF0: 位 8 是软件启用位，0-7 是向量号
+            let spurious_vector = 0xFF; // 通常使用 0xFF 作为伪中断向量
+            self.write(0xF0, spurious_vector | (1 << 8));
 
-            // FIXME: The timer repeatedly counts down at bus frequency
+            // 2. 配置 LVT Timer (时钟)
+            // 寄存器 0x3E0: 设置分频器。0x0B (1011b) 表示 1分频
+            self.write(0x3E0, 0x0B);
+            
+            // 寄存 crate::interrupts::consts 里的向量号
+            let timer_vec = 0x20; // 假设时钟向量号为 0x20
+            // 寄存器 0x320: 位 17:18 为模式 (01b 是 Periodic)，位 16 是屏蔽位 (0 表示开启)
+            self.write(0x320, timer_vec | (1 << 17)); 
+            
+            // 寄存器 0x380: 设置初始计数值，计数到 0 时触发中断
+            self.write(0x380, 1000000); 
 
-            // FIXME: Disable logical interrupt lines (LINT0, LINT1)
+            // 3. 禁用不需要的 LVT 线路 (LINT0, LINT1, PCINT, Error)
+            // 将这些寄存器的位 16 (Mask) 设为 1
+            self.write(0x350, 1 << 16); // LINT0
+            self.write(0x360, 1 << 16); // LINT1
+            self.write(0x340, 1 << 16); // Performance Counter
+            
+            // 将错误中断映射到特定向量并启用
+            let error_vec = 0x31; // 假设错误中断向量为 0x31
+            self.write(0x370, error_vec); 
 
-            // FIXME: Disable performance counter overflow interrupts (PCINT)
+            // 4. 清除错误状态寄存器 (ESR)
+            // 必须连续写入两次才能清除
+            self.write(0x280, 0);
+            self.write(0x280, 0);
 
-            // FIXME: Map error interrupt to IRQ_ERROR.
+            // 5. 确认并清除所有挂起的中断 (EOI)
+            self.eoi();
 
-            // FIXME: Clear error status register (requires back-to-back
-            // writes).
+            // 6. 发送 Init Level De-assert 信号 (同步仲裁 ID)
+            // 这是为了在多核环境下同步 APIC 状态
+            self.write(0x310, 0); // 写 ICR 高 32 位 (目标 CPU 为 0)
+            // 写 ICR 低 32 位: Level De-assert (位 15=0), All Excl Self (位 18:19=11b)
+            self.write(0x300, 0x000C8500); 
+            while self.read(0x300) & (1 << 12) != 0 {
+                core::hint::spin_loop();
+            }
 
-            // FIXME: Ack any outstanding interrupts.
-
-            // FIXME: Send an Init Level De-Assert to synchronise arbitration
-            // ID's.
-
-            // FIXME: Enable interrupts on the APIC (but not on the processor).
+            // 7. 设置任务优先级寄存器 (TPR)
+            // 允许所有优先级的中断进入 CPU
+            self.write(0x080, 0);
         }
 
         // NOTE: Try to use bitflags! macro to set the flags.
