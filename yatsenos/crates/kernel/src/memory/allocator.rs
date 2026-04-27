@@ -3,7 +3,7 @@ use core::ptr::addr_of_mut;
 use linked_list_allocator::LockedHeap;
 use x86_64::VirtAddr;
 
-pub const HEAP_SIZE: usize = 8 * 1024 * 1024; // 8 MiB
+pub const HEAP_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
 
 /// Use linked_list_allocator for kernel heap
 #[global_allocator]

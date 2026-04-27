@@ -40,7 +40,7 @@ pub fn init() {
         //启用时钟中断
         enable_irq(0,0);
         //开启CPU的中断响应开关
-        x86_64::instructions::interrupts::enable();
+        //x86_64::instructions::interrupts::enable();
     }
 
     info!("Interrupts Initialized.");

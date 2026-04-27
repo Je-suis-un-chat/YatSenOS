@@ -172,7 +172,7 @@ fn read_frame_pointer() -> usize {
 }
 
 #[inline(always)]
-fn is_canonical(addr: usize) -> bool {
+pub fn is_canonical(addr: usize) -> bool {
     let upper = addr >> 47;
     upper == 0 || upper == 0x1ffff
 }

@@ -8,6 +8,7 @@ use x86_64::{
 };
 
 use crate::memory::*;
+use crate::proc::manager::*;
 
 pub unsafe fn register_idt(idt: &mut InterruptDescriptorTable) {
     idt.divide_error.set_handler_fn(divide_error_handler);
@@ -49,12 +50,18 @@ pub extern "x86-interrupt" fn page_fault_handler(
     stack_frame: InterruptStackFrame,
     err_code: PageFaultErrorCode,
 ) {
-    panic!(
-        "EXCEPTION: PAGE FAULT, ERROR_CODE: {:?}\n\nTrying to access: {:#x}\nStack_Frame: {:#?}",
-        err_code,
-        Cr2::read().unwrap_or(VirtAddr::new_truncate(0xdeadbeef)),
-        stack_frame
-    );
+    let fault_addr = Cr2::read().expect("CR2 contains invalid virtual address.");
+    if !crate::proc::handle_page_fault(fault_addr, err_code) {
+        warn!(
+            "EXCEPTION: PAGE FAULT, ERROR_CODE: {:?}\n\nTrying to access: {:#x}\n{:#?}",
+            err_code,
+            fault_addr,
+            stack_frame
+        );
+        // FIXME: print info about which process causes page fault?
+        info!("Page Fault caused by process:{}",get_process_manager().current().pid());
+        panic!("Cannot handle page fault!");
+    }
 }
 
 fn parse_gp_error(code: u64) -> &'static str{
