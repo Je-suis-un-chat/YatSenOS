@@ -1,7 +1,9 @@
-use alloc::{collections::*, format, sync::Arc};
+use alloc::{collections::*, format, sync::{Arc, Weak}, string::String};
+use xmas_elf::ElfFile;
+use boot::entry_point;
 use hashbrown::HashMap;
 use spin::{Mutex, RwLock};
-use x86::current;
+use x86::{apic::DestinationMode::Physical, current};
 use super::*;
 use crate::memory::{
     self, PAGE_SIZE,
@@ -14,12 +16,12 @@ use crate::utils::macros::*;
 
 pub static PROCESS_MANAGER: spin::Once<ProcessManager> = spin::Once::new();
 
-pub fn init(init: Arc<Process>) {
+pub fn init(init: Arc<Process>, app_list: Option<boot::AppList>) {
     // FIXME: set init process as Running
     init.write().resume();
     // FIXME: set processor's current pid to init's pid
     processor::set_pid(init.pid());
-    PROCESS_MANAGER.call_once(|| ProcessManager::new(init));
+    PROCESS_MANAGER.call_once(|| ProcessManager::new(init, app_list));
 }
 
 pub fn get_process_manager() -> &'static ProcessManager {
@@ -31,11 +33,12 @@ pub fn get_process_manager() -> &'static ProcessManager {
 pub struct ProcessManager {
     processes: RwLock<HashMap<ProcessId, Arc<Process>, ahash::RandomState>>,
     ready_queue: Mutex<VecDeque<ProcessId>>,
+    app_list: Option<boot::AppList>,
 }
 
 impl ProcessManager {
     //这个传入的进程会作为内核进程加入进程列表
-    pub fn new(init: Arc<Process>) -> Self {
+    pub fn new(init: Arc<Process>, app_list:Option<boot::AppList>) -> Self {
         let mut processes = HashMap::default();
         let ready_queue = VecDeque::new();
         let pid = init.pid();
@@ -46,6 +49,7 @@ impl ProcessManager {
         Self {
             processes: RwLock::new(processes),
             ready_queue: Mutex::new(ready_queue),
+            app_list,
         }
     }
 
@@ -118,8 +122,7 @@ impl ProcessManager {
     next_pid
     }
 
-
-    pub fn spawn_kernel_thread(
+/*  pub fn spawn_kernel_thread(
         &self,
         entry: VirtAddr,
         name: String,
@@ -141,7 +144,7 @@ impl ProcessManager {
         self.push_ready(pid);
         // FIXME: return new process pid
         pid
-    }
+    } */
 
     pub fn kill_current(&self, ret: isize) {
         self.kill(processor::get_pid(), ret);
@@ -172,10 +175,8 @@ impl ProcessManager {
         }
 
         let current = self.current();
-        let proc = current.read();
     
-        drop(proc);
-        if current.write().handle_page_fault(addr) {
+        if current.write().handle_page_fault(addr, err_code) {
         return true; // 成功处理 - 预期异常（如栈增长）
         }
     
@@ -234,4 +235,76 @@ impl ProcessManager {
     pub fn exit_code(&self)->Option<isize>{
         self.current().read().exit_code()
     }
+
+    pub fn spawn(
+    &self,
+    elf: &ElfFile,
+    name: String,
+    parent: Option<Weak<Process>>,
+    proc_data: Option<ProcessData>,
+    ) -> ProcessId {
+    let kproc = self.get_proc(&KERNEL_PID).unwrap();
+    let page_table = kproc.read().clone_page_table();
+    let proc_vm = Some(ProcessVm::new(page_table));
+    let proc = Process::new(name, parent, proc_vm, proc_data);
+
+    // Phase 1: Load ELF into process address space.
+    // Use a block scope to ensure all guards (inner RwLockWriteGuard, mapper,
+    // frame_alloc MutexGuard) are dropped before Phase 2.
+    // This prevents deadlock: alloc_init_stack() in Phase 2 needs both
+    // the Process RwLock write guard AND the FRAME_ALLOCATOR MutexGuard,
+    // which would deadlock if we still hold either of them here.
+    let entry_point;
+    {
+        let mut inner = proc.write();
+        let mapper = &mut inner.vm_mut().page_table.mapper();
+        let frame_alloc = &mut *get_frame_alloc_for_sure();
+        let physical_offset = *crate::memory::PHYSICAL_OFFSET.get().unwrap();
+
+        elf::load_elf(elf, physical_offset, mapper, frame_alloc, true)
+            .expect("Failed to load ELF for new process");
+
+        entry_point = VirtAddr::new(elf.header.pt2.entry_point());
+    } // inner, mapper, frame_alloc (and its MutexGuard) all dropped here
+
+    // Phase 2: Allocate and initialize stack (locks are now free)
+    let stack_top = proc.alloc_init_stack();
+    
+    proc.write().init_stack_frame(entry_point, stack_top);
+
+    trace!("New {:#?}", &proc);
+
+    let pid = proc.pid();
+    // FIXME: something like kernel thread
+    self.add_proc(pid, proc);
+    self.push_ready(pid);
+    pid
+}
+
+    pub fn app_list(&self) -> Option<&boot::AppList> {
+    self.app_list.as_ref()
+    }
+
+    pub fn read(&self, fd: u8, buf: &mut [u8]) -> isize {
+    let current = self.current();
+    let inner = current.read();
+    if let Some(data) = &inner.proc_data {
+        // ProcessInner 实现了 Deref 到 ProcessData（通过 Process 的 Deref 实现）
+        // 但这里需要直接通过 proc_data 字段访问
+        data.read(fd, buf)
+    } else {
+        -1
+    }
+}
+
+    pub fn write(&self, fd: u8, buf: &[u8]) -> isize {
+        let current = self.current();
+        let inner = current.read();
+        if let Some(data) = &inner.proc_data {
+            data.write(fd, buf)
+        } else {
+            -1
+        }
+    }
+
 }

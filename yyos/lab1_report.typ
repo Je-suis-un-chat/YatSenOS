@@ -214,7 +214,7 @@ Updating `tuna` index
 warning: spurious network error (3 tries remaining): [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading); class=Net (12)
 warning: spurious network error (2 tries remaining): [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading); class=Net (12)
 warning: spurious network error (1 try remaining): [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading); class=Net (12)
-error: failed to get `arrayvec` as a dependency of package `ysos_boot v0.1.0 (/home/je-suis-un-chat/YatSenOS/lab1/crates/boot)`
+error: failed to get `arrayvec` as a dependency of package `yyos_boot v0.1.0 (/home/je-suis-un-chat/YatSenOS/lab1/crates/boot)`
 
 Caused by:
 failed to load source for dependency `arrayvec`
@@ -515,7 +515,7 @@ make debug
 - 在另一个终端启动GDB:
 
 ```bash
-gdb target/x86_64-unknown-none/release-with-debug/ysos_kernel
+gdb target/x86_64-unknown-none/release-with-debug/yyos_kernel
 ```
 
 -进入GDB的黑框界面后，依次输入以下命令：
@@ -1385,17 +1385,17 @@ uefi::boot::exit_boot_services(...)
     image("img/dbg_both.png",width:110%),
 )
 
-==== 如果你使用 ysos.py 来启动 qemu，可以尝试修改 -o 选项来实现上述功能.
+==== 如果你使用 yyos.py 来启动 qemu，可以尝试修改 -o 选项来实现上述功能.
 
-1. 用```bash python ysos.py launch --help ```来查看```bash -o ```参数，结果显示如下：
+1. 用```bash python yyos.py launch --help ```来查看```bash -o ```参数，结果显示如下：
 
 ```bash
-(base) je-suis-un-chat@LAPTOP-MAGCR3QA:~/YatSenOS/lab1$ python  ysos.py launch --help
-usage: ysos.py [-h] [-d] [-i] [-m MEMORY] [-o OUTPUT] [-p {release,debug}] [-v] [--dry-run] [--bios BIOS] [--boot BOOT]
+(base) je-suis-un-chat@LAPTOP-MAGCR3QA:~/YatSenOS/lab1$ python  yyos.py launch --help
+usage: yyos.py [-h] [-d] [-i] [-m MEMORY] [-o OUTPUT] [-p {release,debug}] [-v] [--dry-run] [--bios BIOS] [--boot BOOT]
                [--debug-listen DEBUG_LISTEN] [--vvfat_disabled]
                {build,clean,launch,run,clippy}
 
-Build script for YSOS
+Build script for YYOS
 
 positional arguments:
   {build,clean,launch,run,clippy}
@@ -1422,7 +1422,7 @@ options:
 2.在终端中执行：
 
 ```bash 
-python ysos.py launch -o "-serial stdio" --vvfat_disabled
+python yyos.py launch -o "-serial stdio" --vvfat_disabled
 ```
 
 即可实现将串口重定向到主机的标准输入输出。

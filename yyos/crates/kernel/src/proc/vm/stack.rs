@@ -46,10 +46,16 @@ impl Stack {
         &mut self,
         stack_bot:u64,
         mapper: MapperRef,
-        alloc:FrameAllocatorRef
+        alloc:FrameAllocatorRef,
+        user_access: bool,
     ){
         debug_assert!(self.usage == 0, "Stack is not empty.");
-        self.range = elf::map_range(stack_bot, STACK_DEF_PAGE, mapper, alloc).unwrap();
+        let flags = if user_access {
+            PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE
+        } else {
+            PageTableFlags::PRESENT | PageTableFlags::WRITABLE
+        };
+        self.range = elf::map_range(stack_bot, STACK_DEF_PAGE, mapper, alloc, flags).unwrap();
         self.usage = STACK_DEF_PAGE;
     }
     pub fn new(top: Page, size: u64) -> Self {
@@ -75,8 +81,8 @@ impl Stack {
 
     pub fn init(&mut self, mapper: MapperRef, alloc: FrameAllocatorRef) {
         debug_assert!(self.usage == 0, "Stack is not empty.");
-
-        self.range = elf::map_range(STACK_INIT_BOT, STACK_DEF_PAGE, mapper, alloc).unwrap();
+        let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE;
+        self.range = elf::map_range(STACK_INIT_BOT, STACK_DEF_PAGE, mapper, alloc, flags).unwrap();
         self.usage = STACK_DEF_PAGE;
     }
 

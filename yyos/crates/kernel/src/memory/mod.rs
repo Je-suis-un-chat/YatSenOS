@@ -1,5 +1,6 @@
 pub mod address;
 pub mod allocator;
+pub mod user;
 mod frames;
 
 pub mod gdt;

@@ -7,7 +7,8 @@ pub mod process;
 pub mod processor;
 pub mod vm;
 
-use alloc::{format, string::String};
+use alloc::{format, string::{String, ToString}, vec::Vec, sync::Arc};
+use xmas_elf::ElfFile;
 
 pub use context::ProcessContext;
 pub use data::ProcessData;
@@ -59,7 +60,8 @@ pub fn init(boot_info: &'static boot::BootInfo) {
             Some(proc_data),
         )
         };
-    manager::init(kproc);
+    let app_list = boot_info.loaded_apps.clone();
+    manager::init(kproc, app_list);
 
     info!("Process Manager Initialized.");
 }
@@ -76,13 +78,13 @@ pub fn switch(context: &mut ProcessContext) {
         get_process_manager().switch_next(context);
     });
 }
-
+/* 
 pub fn spawn_kernel_thread(entry: fn() -> !, name: String, data: Option<ProcessData>) -> ProcessId {
     x86_64::instructions::interrupts::without_interrupts(|| {
         let entry = VirtAddr::new(entry as usize as u64);
         get_process_manager().spawn_kernel_thread(entry, name, data)
     })
-}
+}*/
 
 pub fn print_process_list() {
     x86_64::instructions::interrupts::without_interrupts(|| {
@@ -119,5 +121,82 @@ pub fn process_exit(ret: isize) -> ! {
 pub fn handle_page_fault(addr: VirtAddr, err_code: PageFaultErrorCode) -> bool {
     x86_64::instructions::interrupts::without_interrupts(|| {
         get_process_manager().handle_page_fault(addr, err_code)
+    })
+}
+
+// FIXME: implement list_app
+pub fn list_app() {
+    // 占位函数，后续实验需要实现：遍历并列出可用的 app
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        let app_list = get_process_manager().app_list();
+        if app_list.is_none() {
+            println!("[!] No app found in list!");
+            return;
+        }
+
+        let apps = app_list
+            .unwrap()
+            .iter()
+            .map(|app| app.name.as_str())
+            .collect::<Vec<&str>>()
+            .join(", ");
+
+        // TODO: print more information like size, entry point, etc.
+
+        println!("[+] App list: {}", apps);
+    });
+}
+
+// FIXME: implement spawn
+pub fn spawn(name: &str) -> Option<ProcessId> {
+    // 占位函数，后续实验需要实现：解析 app 的 ELF 文件，并创建用户态进程
+    let app = x86_64::instructions::interrupts::without_interrupts(|| {
+        let app_list = get_process_manager().app_list()?;
+        app_list.iter().find(|&app| app.name.eq(name))
+    })?;
+
+    elf_spawn(name.to_string(), &app.elf)
+}
+
+pub fn elf_spawn(name: String, elf: &ElfFile) -> Option<ProcessId> {
+    let pid = x86_64::instructions::interrupts::without_interrupts(|| {
+        let manager = get_process_manager();
+        let process_name = name.to_lowercase();
+        let parent = Arc::downgrade(&manager.current());
+        let pid = manager.spawn(elf, name, Some(parent), None);
+
+        debug!("Spawned process: {}#{}", process_name, pid);
+        pid
+    });
+
+    Some(pid)
+}
+
+pub fn read(fd: u8, buf: &mut [u8]) -> isize {
+    x86_64::instructions::interrupts::without_interrupts(|| get_process_manager().read(fd, buf))
+}
+
+pub fn write(fd: u8, buf: &[u8]) -> isize {
+    x86_64::instructions::interrupts::without_interrupts(|| get_process_manager().write(fd, buf))
+}
+
+pub fn exit(ret: isize, context: &mut ProcessContext) {
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        let manager = get_process_manager();
+        // FIXME: implement this for ProcessManager
+        manager.kill_current(ret);
+        manager.switch_next(context);
+    })
+}
+
+#[inline]
+pub fn still_alive(pid: ProcessId) -> bool {
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        // check if the process is still alive
+        let proc = get_process_manager().get_proc(&pid);
+        match proc{
+            Some(p) => p.read().status() != ProgramStatus::Dead,
+            None => false,
+        }
     })
 }

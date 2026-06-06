@@ -2,7 +2,7 @@
 
 use core::ptr::NonNull;
 
-use arrayvec::ArrayVec;
+use arrayvec::{ArrayString, ArrayVec};
 pub use uefi::{
     Status,
     boot::{MemoryAttribute, MemoryDescriptor, MemoryType},
@@ -37,6 +37,9 @@ pub struct BootInfo {
 
     /// The system table virtual address
     pub system_table: NonNull<core::ffi::c_void>,
+
+    /// Loaded apps
+    pub loaded_apps: Option<AppList>,
 }
 
 /// Get current page table from CR3
@@ -100,3 +103,28 @@ macro_rules! entry_point {
         }
     };
 }
+
+/// App information
+pub struct App<'a> {
+    /// The name of app
+    pub name: ArrayString<16>,
+    /// The ELF file
+    pub elf: xmas_elf::ElfFile<'a>,
+}
+
+impl<'a> Clone for App<'a> {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            // xmas_elf::ElfFile does not implement Clone, but it only contains a slice `input` 
+            // and some small internal states parsed from it.
+            // Since it does not derive Clone, we manually reconstruct it from the original byte slice.
+            elf: xmas_elf::ElfFile::new(self.elf.input).expect("Failed to clone ElfFile"),
+        }
+    }
+}
+
+pub type AppList = ArrayVec<App<'static>, 16>;
+
+
+ 

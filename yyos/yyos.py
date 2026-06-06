@@ -7,7 +7,7 @@ import argparse
 import glob
 
 
-parser = argparse.ArgumentParser(description="Build script for YSOS")
+parser = argparse.ArgumentParser(description="Build script for YYOS")
 parser.add_argument("-d", "--debug", action="store_true", help="Enable debug for qemu")
 parser.add_argument(
     "-i", "--intdbg", action="store_true", help="Enable interrupt output for qemu"
@@ -202,7 +202,7 @@ def build():
     info("Building", "bootloader...")
     execute_command([cargo_exe, "build", "--release"], bootloader)
     compile_output = os.path.join(
-        os.getcwd(), "target", "x86_64-unknown-uefi", "release", "ysos_boot.efi"
+        os.getcwd(), "target", "x86_64-unknown-uefi", "release", "yyos_boot.efi"
     )
     copy_to_esp(compile_output, os.path.join("EFI", "BOOT", "BOOTX64.EFI"))
 
@@ -220,7 +220,7 @@ def build():
     execute_command([cargo_exe, "build", profile, "-Zjson-target-spec"], kernel)
     profile_dir = "release" if args.profile == "release" else "release-with-debug"
     compile_output = os.path.join(
-        os.getcwd(), "target", "x86_64-unknown-none", profile_dir, "ysos_kernel"
+        os.getcwd(), "target", "x86_64-unknown-none", profile_dir, "yyos_kernel"
     )
     copy_to_esp(compile_output, "KERNEL.ELF")
 
@@ -243,7 +243,7 @@ def build():
         info("Building", f"app {app}...")
         execute_command([cargo_exe, "build", profile, "-Zjson-target-spec"], app_path)
         compile_output = os.path.join(
-            os.getcwd(), "target", "x86_64-unknown-ysos", profile_dir, app_name
+            os.getcwd(), "target", "x86_64-unknown-yyos", profile_dir, app_name
         )
         copy_to_esp(compile_output, os.path.join("APP", app))
 

@@ -4,16 +4,16 @@ pub(crate) mod macros;
 mod regs;
 
 //pub mod clock;
-pub mod func;
+//pub mod func;
 pub mod logger;
 
 
 pub use macros::*;
 pub use regs::*;
-use uefi::Status;
-use crate::proc::manager::*;
-use crate::proc::*;
-
+//use uefi::Status;
+//use crate::proc::manager::*;
+//use crate::proc::*;
+pub mod resource;
 pub const fn get_ascii_header() -> &'static str {
     concat!(
         r#"
@@ -31,7 +31,7 @@ pub const fn get_ascii_header() -> &'static str {
     )
 }
 
-
+/* 
 pub fn new_test_thread(id: &str) -> ProcessId {
     let mut proc_data = ProcessData::new();
     proc_data.set_env("id", id);
@@ -41,8 +41,8 @@ pub fn new_test_thread(id: &str) -> ProcessId {
         alloc::format!("#{}_test", id),
         Some(proc_data),
     )
-}
-
+}*/
+/* 
 pub fn new_stack_test_thread() {
     let pid = spawn_kernel_thread(
         func::stack_test,
@@ -52,8 +52,8 @@ pub fn new_stack_test_thread() {
 
     // wait for progress exit
     wait(pid);
-}
-
+}*/
+/* 
 fn wait(pid: ProcessId) {
     loop {
         // FIXME: try to get the status of the process
@@ -69,7 +69,7 @@ fn wait(pid: ProcessId) {
             break;
         }
     }
-}
+}*/
     
 
 const SHORT_UNITS: [&str; 4] = ["B", "K", "M", "G"];

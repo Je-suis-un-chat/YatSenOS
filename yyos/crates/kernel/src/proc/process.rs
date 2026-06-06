@@ -2,6 +2,7 @@ use alloc::{sync::{Arc, Weak}, vec::Vec};
 
 use spin::*;
 use x86_64::structures::paging::{mapper::MapToError, page::PageRange, *};
+use xmas_elf::ElfFile;
 
 use super::*;
 use crate::memory::*;
@@ -143,8 +144,8 @@ impl ProcessInner {
         self.proc_vm.as_mut().unwrap()
     }
 
-    pub fn handle_page_fault(&mut self, addr: VirtAddr) -> bool {
-        self.vm_mut().handle_page_fault(addr)
+    pub fn handle_page_fault(&mut self, addr: VirtAddr, err_code: PageFaultErrorCode) -> bool {
+        self.vm_mut().handle_page_fault(addr, err_code)
     }
 
     /// Save the process's context
@@ -187,6 +188,10 @@ impl ProcessInner {
         self.children.clear();
 
         trace!("Process {} killed with exit code {}", self.name, ret);
+    }
+    pub fn load_elf(&mut self, elf: &ElfFile)
+    {
+        // NOT NEEDED: elf_load is now handled in manager.rs `spawn` by calling `elf::load_elf`
     }
 }
 

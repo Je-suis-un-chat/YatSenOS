@@ -18,7 +18,9 @@ linked_list_allocator = { workspace = true }
 log                   = { workspace = true }
 paste                 = { workspace = true }
 spin                  = { workspace = true }
+xmas-elf              = { workspace = true }
 uefi                  = { workspace = true }
 volatile              = { workspace = true }
 x86                   = { workspace = true }
 x86_64                = { workspace = true }
+yyos_syscall = { version = "0.4.0", path = "../syscall" }

@@ -42,7 +42,7 @@ impl<'a> Config<'a> {
             }
             // parse 'key=value'
             if let Some((key, value)) = line.split_once('=') {
-                config.process(key, value);
+                config.process(key.trim(), value.trim());
             }
         }
         config

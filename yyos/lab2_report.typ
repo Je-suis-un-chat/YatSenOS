@@ -548,15 +548,15 @@ unsafe {
 #![no_std]
 #![no_main]
 
-use ysos::*;
-use ysos_kernel as ysos;
+use yyos::*;
+use yyos_kernel as yyos;
 
 extern crate alloc;
 
 boot::entry_point!(kernel_main);
 
 pub fn kernel_main(boot_info: &'static boot::BootInfo) -> ! {
-    ysos::init(boot_info);
+    yyos::init(boot_info);
 
     loop {
         print!("> ");
@@ -572,7 +572,7 @@ pub fn kernel_main(boot_info: &'static boot::BootInfo) -> ! {
         }
     }
 
-    ysos::shutdown();
+    yyos::shutdown();
 }
 ```
 
@@ -852,7 +852,7 @@ Triple fault
 缺页异常发生前后的寄存器值：
 
 ```bash
-Breakpoint 1, 0xffffff0000003000 in ysos_kernel::kernel_main ()
+Breakpoint 1, 0xffffff0000003000 in yyos_kernel::kernel_main ()
 (gdb) monitor info registers
 
 CPU#0
@@ -891,11 +891,11 @@ XMM14=0000000000000000 0000000000000000 XMM15=0000000000000000 0000000000000000
 ```
 ```bash
 (gdb) n
-Single stepping until exit from function _RNvCs6uHWCmPRqIz_11ysos_kernel11kernel_main,
+Single stepping until exit from function _RNvCs6uHWCmPRqIz_11yyos_kernel11kernel_main,
 which has no line number information.
-0xffffff0000006e40 in ysos_kernel::interrupt::exceptions::page_fault_handler ()
+0xffffff0000006e40 in yyos_kernel::interrupt::exceptions::page_fault_handler ()
 (gdb) n
-Single stepping until exit from function _RNvNtNtCsi7ZoszOsIzC_11ysos_kernel9interrupt10exceptions18page_fault_handler,
+Single stepping until exit from function _RNvNtNtCsi7ZoszOsIzC_11yyos_kernel9interrupt10exceptions18page_fault_handler,
 which has no line number information.
 0xffffff000000e320 in core::panicking::panic_fmt ()
 (gdb) monitor info registers
@@ -966,7 +966,7 @@ RSP（栈在哪里）：
 
 异常后： TR=0018，GDT=ffffff0000813310（地址在高半区，且 TR 加载了 0x18 偏移量）。
 
-分析： 这说明在两次快照之间，你的 ysos::init() 成功运行了，它切换了全局描述符表并加载了任务状态段（TSS）。
+分析： 这说明在两次快照之间，你的 yyos::init() 成功运行了，它切换了全局描述符表并加载了任务状态段（TSS）。
 
 🛠️ 为什么缺页异常（Page Fault）是可恢复的？
 
