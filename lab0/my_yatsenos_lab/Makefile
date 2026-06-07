@@ -12,7 +12,7 @@ ifeq (${MODE}, release)
 endif
 
 .PHONY: build run debug clean launch intdbg \
-	target/x86_64-unknown-uefi/$(MODE)/ysos_boot.efi
+	target/x86_64-unknown-uefi/$(MODE)/yyos_boot.efi
 
 run: build launch
 
@@ -52,9 +52,9 @@ build: $(ESP)
 
 $(ESP): $(ESP)/EFI/BOOT/BOOTX64.EFI
 
-$(ESP)/EFI/BOOT/BOOTX64.EFI: target/x86_64-unknown-uefi/$(MODE)/ysos_boot.efi
+$(ESP)/EFI/BOOT/BOOTX64.EFI: target/x86_64-unknown-uefi/$(MODE)/yyos_boot.efi
 	@mkdir -p $(@D)
 	cp $< $@
 
-target/x86_64-unknown-uefi/$(MODE)/ysos_boot.efi: crates/boot
+target/x86_64-unknown-uefi/$(MODE)/yyos_boot.efi: crates/boot
 	cd crates/boot && cargo build $(BUILD_ARGS)

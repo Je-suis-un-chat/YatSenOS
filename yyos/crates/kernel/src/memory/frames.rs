@@ -1,4 +1,4 @@
-use alloc::boxed::Box;
+use alloc::{boxed::Box, vec::Vec};
 // 1. 我们不再需要导入 arrayvec
 use boot::{MemoryDescriptor, MemoryType};
 use x86_64::{
@@ -18,17 +18,14 @@ pub struct BootInfoFrameAllocator {
     size: usize,
     used: usize,
     frames: BootInfoFrameIter,
+    recycled: Vec<PhysFrame>,
 }
 
 impl BootInfoFrameAllocator {
     // 2. 魔法在这里：将参数改为 &'static [MemoryDescriptor] (静态切片)
     // 当外面传入 &boot_info.memory_map (ArrayVec引用) 时，Rust 会自动把它转成切片！
     pub unsafe fn init(memory_map: &'static [MemoryDescriptor], size: usize) -> Self {
-        BootInfoFrameAllocator {
-            size,
-            frames: create_frame_iter(memory_map),
-            used: 0,
-        }
+        Self { size, used: 0, frames: create_frame_iter(memory_map), recycled: Vec::new(), }
     }
 
     pub fn frames_used(&self) -> usize {
@@ -42,14 +39,18 @@ impl BootInfoFrameAllocator {
 
 unsafe impl FrameAllocator<Size4KiB> for BootInfoFrameAllocator {
     fn allocate_frame(&mut self) -> Option<PhysFrame> {
+        let frame = self.recycled.pop().or_else(|| self.frames.next())?;
         self.used += 1;
-        self.frames.next()
+        Some(frame)
     }
 }
 
 impl FrameDeallocator<Size4KiB> for BootInfoFrameAllocator {
-    unsafe fn deallocate_frame(&mut self, _frame: PhysFrame) {
+    unsafe fn deallocate_frame(&mut self, frame: PhysFrame) {
         // TODO: deallocate frame
+        self.used = self.used.checked_sub(1).expect("Physical frame double free");
+
+        self.recycled.push(frame);
     }
 }
 

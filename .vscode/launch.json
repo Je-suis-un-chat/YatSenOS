@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug YatSenOS",
+            "name": "Debug YYOS",
             "type": "lldb",
             "request": "custom",
             "targetCreateCommands": [
@@ -11,7 +11,7 @@
             ],
             "processCreateCommands": [
                 "gdb-remote localhost:1234",
-                "breakpoint set --name ysos_kernel::init",
+                "breakpoint set --name yyos_kernel::init",
                 "continue"
             ]
         }

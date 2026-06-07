@@ -35,6 +35,14 @@ impl ProcessVm {
         }
     }
 
+    pub fn from_parts(page_table: PageTableContext, stack: Stack) -> Self {
+        Self { page_table, stack }
+    }
+
+    pub fn stack_top(&self) -> VirtAddr {
+        self.stack.range.end.start_address()
+    }
+
     pub fn init_kernel_vm(mut self) -> Self {
         // TODO: record kernel code usage
         self.stack = Stack::kstack();
@@ -136,6 +144,17 @@ impl ProcessVm {
 
     pub(super) fn memory_usage(&self) -> u64 {
         self.stack.memory_usage()
+    }
+
+    pub fn fork(&self, stack_offset_count: u64) -> Self{
+        let page_table = self.page_table.fork();
+
+        let mut mapper = page_table.mapper();
+        let mut alloc = get_frame_alloc_for_sure();
+
+        let stack = self.stack.fork(&mut mapper, &mut alloc, stack_offset_count,);
+
+        Self { page_table, stack }
     }
 }
 

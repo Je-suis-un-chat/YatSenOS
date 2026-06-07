@@ -111,7 +111,7 @@ fn test_unique_id() {
 ```
 
 == 运行 UEFI Shell：初始化仓库，使用 QEMU 启动 UEFI Shell
-== YSOS 启动：配置 Rust ToolChain，运行第一个 UEFI 程序
+== YYOS 启动：配置 Rust ToolChain，运行第一个 UEFI 程序
 
 
 = 实验过程
@@ -243,7 +243,7 @@ qemu-system-x86_64 -bios ./assets/OVMF.fd -net none -nographic
 
 ```-nographic```：禁用图形输出，使用命令行界面。
 
-== YSOS 启动 !
+== YYOS 启动 !
 
 === 配置 Rust ToolChain
 

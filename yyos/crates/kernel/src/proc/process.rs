@@ -1,11 +1,11 @@
-use alloc::{sync::{Arc, Weak}, vec::Vec};
+use alloc::{fmt::format, sync::{Arc, Weak}, vec::Vec};
 
 use spin::*;
 use x86_64::structures::paging::{mapper::MapToError, page::PageRange, *};
 use xmas_elf::ElfFile;
 
 use super::*;
-use crate::memory::*;
+use crate::{memory::*, proc::vm::stack::{STACK_MAX_SIZE, STACK_START_MASK}};
 use context::*;
 
 
@@ -95,6 +95,33 @@ impl Process {
     pub fn alloc_init_stack(&self) -> VirtAddr {
         self.write().vm_mut().init_proc_stack(self.pid)
     }
+
+    pub fn fork(self: &Arc<Self>) -> Arc<Self>{
+        let child_pid = ProcessId::new();
+
+        let stack_offset_count = u16::from(child_pid) as u64 - u16::from(self.pid) as u64;
+
+        let mut inner = self.write();
+        let child_inner = inner.fork(Arc::downgrade(self), stack_offset_count);
+
+        let child = Arc::new(Process{
+            pid: child_pid,
+            inner: RwLock::new(child_inner),
+        });
+
+        inner.children.push(child.clone());
+
+        inner.context.set_rax(child_pid.0 as usize);
+
+        debug!(
+            "Forked child {}#{} from parent #{}",
+            child.read().name(),
+            child_pid,
+            self.pid()
+        );
+
+        child
+    }
 }
 
 impl ProcessInner {
@@ -171,27 +198,68 @@ impl ProcessInner {
         self.parent.as_ref().and_then(|p| p.upgrade())
     }
 
+    pub fn add_child(&mut self, child: Arc<Process>) {
+        self.children.push(child);
+    }
+
     pub fn kill(&mut self, ret: isize) {
         // FIXME: set exit code
         self.exit_code = Some(ret);
         // FIXME: set status to dead
         self.status = ProgramStatus::Dead;
         // FIXME: take and drop unused resources
-        if let Some(cur_proc_data) = self.proc_data.take()
-        {
-            drop(cur_proc_data);
-        }
-        if let Some(cur_proc_vm) = self.proc_vm.take()
-        {
-            drop(cur_proc_vm);
-        }
+        trace!(
+            "Process {} killed with exit code {}",
+            self.name,
+            ret
+        );
+        
         self.children.clear();
 
         trace!("Process {} killed with exit code {}", self.name, ret);
     }
+
+    pub fn take_resources(&mut self) -> (Option<ProcessVm>, Option<ProcessData>)
+    {
+        (
+            self.proc_vm.take(),
+            self.proc_data.take(),
+        )
+    }
     pub fn load_elf(&mut self, elf: &ElfFile)
     {
         // NOT NEEDED: elf_load is now handled in manager.rs `spawn` by calling `elf::load_elf`
+    }
+
+    pub fn fork(&mut self, parent: Weak<Process>, stack_offset_count: u64,)
+    -> ProcessInner{
+        let proc_vm = self.proc_vm.as_ref().expect("Cannot fork process without virtual memory").fork(stack_offset_count);
+
+        let stack_offset = STACK_MAX_SIZE * stack_offset_count;
+
+        let mut context = self.context;
+
+        let old_rsp = context.stack_frame.stack_pointer.as_u64();
+        let old_stack_start = old_rsp & STACK_START_MASK;
+        let old_stack_end = old_stack_start + STACK_MAX_SIZE;
+        context.relocate_stack(old_stack_start, old_stack_end, stack_offset);
+        context.set_rax(0);
+
+        ProcessInner { name: format!("{}_forked", self.name), parent: Some(parent), children: Vec::new(), ticks_passed: 0, status: ProgramStatus::Ready, context, exit_code: None, proc_data: self.proc_data.clone(), proc_vm: Some(proc_vm), }
+    }
+
+    pub fn block(&mut self){
+        self.status = ProgramStatus::Blocked;
+    }
+
+    pub fn wake_up(&mut self){
+        if self.status == ProgramStatus::Blocked{
+            self.status = ProgramStatus::Ready;
+        }
+    }
+
+    pub fn set_return_value(&mut self, value:usize){
+        self.context.set_rax(value);
     }
 }
 

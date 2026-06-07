@@ -55,6 +55,9 @@ pub fn dispatcher(context: &mut ProcessContext) {
         // None -> pid: u16
         Syscall::GetPid => context.set_rax(sys_getpid()),
 
+        // None -> pid: u16 (子进程返回0, 父进程返回子进程pid)
+        Syscall::Fork => sys_fork(context),
+
         // path: &str (ptr: arg0 as *const u8, len: arg1) -> pid: u16
         Syscall::Spawn => context.set_rax(sys_spawn(&args)),
         // ret: arg0 as isize

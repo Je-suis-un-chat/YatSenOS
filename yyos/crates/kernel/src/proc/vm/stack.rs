@@ -5,6 +5,7 @@ use x86_64::{
 };
 
 use super::{FrameAllocatorRef, MapperRef};
+use crate::memory::physical_to_virtual;
 
 // 0xffff_ff00_0000_0000 is the kernel's address space
 pub const STACK_MAX: u64 = 0x4000_0000_0000;
@@ -36,8 +37,9 @@ const KSTACK_INIT_PAGE: Page<Size4KiB> = Page::containing_address(VirtAddr::new(
 const KSTACK_INIT_TOP_PAGE: Page<Size4KiB> =
     Page::containing_address(VirtAddr::new(KSTACK_INIT_TOP));
 
+#[derive(Clone, Copy)]
 pub struct Stack {
-    range: PageRange<Size4KiB>,
+    pub(super) range: PageRange<Size4KiB>,
     usage: u64,
 }
 
@@ -157,6 +159,56 @@ impl Stack {
 
     pub fn memory_usage(&self) -> u64 {
         self.usage * crate::memory::PAGE_SIZE
+    }
+
+    pub fn fork(&self, mapper: MapperRef, alloc: FrameAllocatorRef, stack_offset_count: u64,)
+    -> Self{
+        let stack_offset = stack_offset_count * STACK_MAX_SIZE;
+        let offset_pages = stack_offset / crate::memory::PAGE_SIZE;
+
+        let new_start = self.range.start - offset_pages;
+        let new_end = self.range.end - offset_pages;
+        let new_range = Page::range(new_start, new_end);
+        let old_stack_start = self.range.start.start_address().as_u64();
+        let old_stack_end = self.range.end.start_address().as_u64();
+
+        let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE;
+        
+        for (source_page, target_page) in self.range.clone().zip(new_range.clone()){
+            let frame = alloc
+            .allocate_frame()
+            .expect("Cannot allocate frame for child stack");
+
+        unsafe {
+            mapper
+                .map_to(target_page, frame, flags, alloc)
+                .expect("Cannot map child stack")
+                .flush();
+
+            let source = source_page.start_address().as_ptr::<u8>();
+            let target = physical_to_virtual(
+                frame.start_address().as_u64(),
+            ) as *mut u8;
+
+            core::ptr::copy_nonoverlapping(
+                source,
+                target,
+                crate::memory::PAGE_SIZE as usize,
+            );
+
+            // Relocate saved frame pointers and other stack-relative pointers.
+            for index in 0..crate::memory::PAGE_SIZE as usize / size_of::<usize>() {
+                let slot = target.cast::<usize>().add(index);
+                let value = slot.read();
+
+                if value >= old_stack_start as usize && value < old_stack_end as usize {
+                    slot.write(value - stack_offset as usize);
+                }
+            }
+        }
+        }
+
+        Self { range: new_range, usage: self.usage,}
     }
 }
 

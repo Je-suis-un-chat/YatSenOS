@@ -4,6 +4,7 @@ use boot::entry_point;
 use hashbrown::HashMap;
 use spin::{Mutex, RwLock};
 use x86::{apic::DestinationMode::Physical, current};
+use x86_64::{VirtAddr, registers::control::Cr3};
 use super::*;
 use crate::memory::{
     self, PAGE_SIZE,
@@ -34,6 +35,7 @@ pub struct ProcessManager {
     processes: RwLock<HashMap<ProcessId, Arc<Process>, ahash::RandomState>>,
     ready_queue: Mutex<VecDeque<ProcessId>>,
     app_list: Option<boot::AppList>,
+    wait_queue: Mutex<HashMap<ProcessId, BTreeSet<ProcessId>, ahash::RandomState>>,
 }
 
 impl ProcessManager {
@@ -41,6 +43,7 @@ impl ProcessManager {
     pub fn new(init: Arc<Process>, app_list:Option<boot::AppList>) -> Self {
         let mut processes = HashMap::default();
         let ready_queue = VecDeque::new();
+        let wait_queue: HashMap<ProcessId, BTreeSet<ProcessId>, ahash::RandomState> = HashMap::default();
         let pid = init.pid();
 
         trace!("Init {:#?}", init);
@@ -50,6 +53,7 @@ impl ProcessManager {
             processes: RwLock::new(processes),
             ready_queue: Mutex::new(ready_queue),
             app_list,
+            wait_queue: Mutex::new(wait_queue),
         }
     }
 
@@ -59,8 +63,20 @@ impl ProcessManager {
     }
 
     #[inline]
-    fn add_proc(&self, pid: ProcessId, proc: Arc<Process>) {
+    pub fn add_proc(&self, pid: ProcessId, proc: Arc<Process>) {
         self.processes.write().insert(pid, proc);
+    }
+
+    pub fn fork(&self) -> ProcessId{
+       let parent = self.current();
+       let child = parent.fork();
+       let child_pid = child.pid();
+
+       self.add_proc(child_pid, child);
+
+       trace!("Ready queue: {:?}", self.ready_queue.lock());
+       
+       child_pid
     }
 
     #[inline]
@@ -306,5 +322,48 @@ impl ProcessManager {
             -1
         }
     }
+
+    pub fn block(&self, pid:ProcessId){
+        if let Some(proc) = self.get_proc(&pid){
+            proc.write().block();
+        }
+    }
+    pub fn get_exit_code(&self, pid: ProcessId) -> Option<isize>{
+    let proc = self.get_proc(&pid)?;
+    let inner = proc.read();
+
+    if inner.status() == ProgramStatus::Dead{
+        inner.exit_code()
+    }
+    else{
+        None
+    }
+}
+
+    pub fn wait_pid(&self, pid:ProcessId){
+        let current= processor::get_pid();
+
+        self.wait_queue.lock().entry(pid).or_default().insert(current);
+    }
+
+    pub fn wake_up_waiter(&self, pid: ProcessId, ret: isize){
+        let waiters = self.wait_queue.lock().remove(&pid);
+
+        if let Some(waiters) = waiters{
+            for waiter_pid in waiters{
+                if let Some(waiter) = self.get_proc(&waiter_pid){
+                    let mut inner = waiter.write();
+
+                    inner.set_return_value(ret as usize);
+                    inner.wake_up();
+
+                    drop(inner);
+
+                    self.push_ready(waiter_pid);
+                }
+            }
+        }
+    }
+
 
 }

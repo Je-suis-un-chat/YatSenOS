@@ -17,7 +17,7 @@ pub use paging::PageTableContext;
 pub use pid::ProcessId;
 use process::*;
 use vm::ProcessVm;
-use x86_64::{VirtAddr, structures::idt::PageFaultErrorCode};
+use x86_64::{VirtAddr, structures::{idt::PageFaultErrorCode, tss::InvalidIoMap::IoMapBeforeTss}};
 
 use crate::memory::{PAGE_SIZE, allocator::HEAP_SIZE};
 pub const KERNEL_PID: ProcessId = ProcessId(1);
@@ -184,8 +184,23 @@ pub fn exit(ret: isize, context: &mut ProcessContext) {
     x86_64::instructions::interrupts::without_interrupts(|| {
         let manager = get_process_manager();
         // FIXME: implement this for ProcessManager
-        manager.kill_current(ret);
-        manager.switch_next(context);
+        let exiting = manager.current();
+
+        exiting.kill(ret);
+
+        let old_pid = exiting.pid();
+
+        manager.wake_up_waiter(old_pid, ret);
+        let next_pid = manager.switch_next(context);
+
+        if next_pid == old_pid{
+            return;
+        }
+
+        let (proc_vm, proc_data) = exiting.write().take_resources();
+
+        drop(proc_data);
+        drop(proc_vm);
     })
 }
 
@@ -198,5 +213,41 @@ pub fn still_alive(pid: ProcessId) -> bool {
             Some(p) => p.read().status() != ProgramStatus::Dead,
             None => false,
         }
+    })
+}
+
+pub fn fork(context:&mut ProcessContext){
+    x86_64::instructions::interrupts::without_interrupts(||{
+        let manager = get_process_manager();
+        let parent_pid = manager.current().pid();
+
+        manager.save_current(context);
+
+        let child_pid = manager.fork();
+
+        manager.push_ready(child_pid);
+        manager.push_ready(parent_pid);
+
+        manager.switch_next(context);
+    })
+}
+
+
+pub fn wait_pid(pid: ProcessId, context:&mut ProcessContext){
+    x86_64::instructions::interrupts::without_interrupts(||{
+        let manager = get_process_manager();
+        if let Some(ret) = manager.get_exit_code(pid){
+            context.set_rax(ret as usize);
+            return;
+        }
+        if manager.get_proc(&pid).is_none(){
+            context.set_rax((-1isize) as usize);
+            return;
+        }
+        manager.wait_pid(pid);
+        manager.save_current(context);
+        manager.current().write().block();
+        manager.switch_next(context);
+        
     })
 }

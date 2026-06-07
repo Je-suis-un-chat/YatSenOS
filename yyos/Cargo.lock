@@ -464,6 +464,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "yyos_fork"
+version = "0.4.0"
+dependencies = [
+ "yylib",
+]
+
+[[package]]
 name = "yyos_hello"
 version = "0.4.0"
 dependencies = [

@@ -33,6 +33,40 @@ impl ProcessContext {
     }
 
     #[inline]
+    pub fn set_stack_pointer(&mut self, value: VirtAddr) {
+        self.value.stack_frame.stack_pointer = value;
+    }
+
+    pub fn relocate_stack(&mut self, old_start: u64, old_end: u64, offset: u64) {
+        let relocate = |value: &mut usize| {
+            if *value >= old_start as usize && *value < old_end as usize {
+                *value -= offset as usize;
+            }
+        };
+
+        let regs = &mut self.value.regs;
+        relocate(&mut regs.r15);
+        relocate(&mut regs.r14);
+        relocate(&mut regs.r13);
+        relocate(&mut regs.r12);
+        relocate(&mut regs.r11);
+        relocate(&mut regs.r10);
+        relocate(&mut regs.r9);
+        relocate(&mut regs.r8);
+        relocate(&mut regs.rdi);
+        relocate(&mut regs.rsi);
+        relocate(&mut regs.rdx);
+        relocate(&mut regs.rcx);
+        relocate(&mut regs.rbx);
+        relocate(&mut regs.rax);
+        relocate(&mut regs.rbp);
+
+        let mut rsp = self.value.stack_frame.stack_pointer.as_u64() as usize;
+        relocate(&mut rsp);
+        self.value.stack_frame.stack_pointer = VirtAddr::new(rsp as u64);
+    }
+
+    #[inline]
     pub fn save(&mut self, context: &ProcessContext) {
         self.value = context.as_ref().as_ptr().read();
     }

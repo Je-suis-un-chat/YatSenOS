@@ -151,6 +151,10 @@ pub fn sys_exit(args: &SyscallArgs, context: &mut ProcessContext) {
     proc::exit(ret, context);
 }
 
+pub fn sys_fork(context: & mut ProcessContext){
+    proc::fork(context);
+}
+
 pub fn sys_list_app(args: &SyscallArgs) -> usize {
     let ptr = args.arg0 as *mut u8;
     let len = args.arg1;
