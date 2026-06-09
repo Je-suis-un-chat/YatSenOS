@@ -4,6 +4,7 @@ use uefi::proto::device_path::messaging::MasterSlave;
 
 use super::SyscallArgs;
 use crate::proc::manager::get_process_manager;
+use crate::proc::sync::SemaphoreResult;
 use crate::{proc::{self, *}, utils::*};
 use crate::drivers::input::try_pop_key;
 
@@ -190,4 +191,73 @@ pub fn sys_list_app(args: &SyscallArgs) -> usize {
 pub fn sys_stat() -> usize {
     proc::print_process_list();
     0
+}
+
+pub fn sem_wait(key: u32, context: &mut ProcessContext){
+    x86_64::instructions::interrupts::without_interrupts(||{
+        let manager = get_process_manager();
+        let pid = processor::get_pid();
+        let ret = manager.current().write().sem_wait(key, pid);
+        match ret{
+            SemaphoreResult::Ok => context.set_rax(0),
+            SemaphoreResult::NotExist => context.set_rax(1),
+            SemaphoreResult::Block(pid) => {
+                context.set_rax(0);
+                manager.save_current(context);
+                manager.block(pid);
+                manager.switch_next(context);
+            }
+            _ => unreachable!(),
+        }
+    })
+}
+pub fn sem_signal(key: u32,context: &mut ProcessContext)
+{
+    let manager = get_process_manager();
+
+    match manager.current().read().sem_signal(key){
+        SemaphoreResult::Ok => context.set_rax(0),
+        SemaphoreResult::NotExist => context.set_rax(1),
+        SemaphoreResult::WakeUp(pid) => {
+            if let Some(proc) = manager.get_proc(&pid){
+                proc.write().set_return_value(0);
+                proc.write().wake_up();
+                manager.push_ready(pid);
+            }
+            context.set_rax(0);
+        }
+        _ => unreachable!(),
+    }
+}
+
+pub fn new_sem(key: u32, value: usize) -> usize{
+    let manager = get_process_manager();
+    if manager.current().read().new_sem(key, value){
+        0
+    }else {
+        1
+    }
+}
+
+pub fn remove_sem(key: u32) -> usize
+{
+        let manager = get_process_manager();
+        if manager.current().read().remove_sem(key){
+            0
+        }else {
+            1
+        }
+
+}
+
+pub fn sys_sem(args: &SyscallArgs, context: &mut ProcessContext)
+{
+    match args.arg0 {
+        0 => context.set_rax(new_sem(args.arg1 as u32, args.arg2)),
+        1 => context.set_rax(remove_sem(args.arg1 as u32)),
+        2 => sem_signal(args.arg1 as u32, context),
+        3 => sem_wait(args.arg1 as u32, context),
+        _ => context.set_rax(usize::MAX),
+    }
+    
 }

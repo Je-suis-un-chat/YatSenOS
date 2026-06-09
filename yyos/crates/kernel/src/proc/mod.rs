@@ -6,6 +6,7 @@ pub mod pid;
 pub mod process;
 pub mod processor;
 pub mod vm;
+pub mod sync;
 
 use alloc::{format, string::{String, ToString}, vec::Vec, sync::Arc};
 use xmas_elf::ElfFile;

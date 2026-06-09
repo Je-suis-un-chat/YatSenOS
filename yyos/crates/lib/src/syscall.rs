@@ -1,5 +1,7 @@
 use syscall_def::Syscall;
 
+use crate::syscall;
+
 #[inline(always)]
 pub fn sys_write(fd: u8, buf: &[u8]) -> Option<usize> {
     let ret = syscall!(
@@ -34,7 +36,12 @@ pub fn sys_read(fd: u8, buf: &mut [u8]) -> Option<usize> {
 pub fn sys_wait_pid(pid: u16) -> isize {
     // FIXME: try to get the return value for process
     //        loop until the process is finished
-    syscall!(Syscall::WaitPid, pid as u64) as isize
+    loop{
+        let ret = syscall!(Syscall::WaitPid, pid as u64) as isize;
+        if ret != -1{
+            return ret;
+        }
+    }
     
 }
 
@@ -77,4 +84,20 @@ pub fn sys_get_pid() -> u16 {
 pub fn sys_exit(code: isize) -> ! {
     syscall!(Syscall::Exit, code as u64);
     unreachable!("This process should be terminated by now.")
+}
+
+#[inline(always)]
+pub fn sys_new_sem(key: u32, value: usize) -> bool {
+    syscall!(Syscall::Sem, 0, key as usize, value) == 0
+}
+pub fn sys_remove_sem(key: u32) -> bool{
+    syscall!(Syscall::Sem, 1, key as usize) == 0
+}
+pub fn sys_sem_signal(key: u32) -> bool
+{
+    syscall!(Syscall::Sem, 2, key as usize) == 0
+}
+pub fn sys_sem_wait(key: u32) -> bool
+{
+    syscall!(Syscall::Sem, 3, key as usize) == 0
 }

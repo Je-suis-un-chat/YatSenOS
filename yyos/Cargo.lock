@@ -448,6 +448,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "yyos_counter"
+version = "0.4.0"
+dependencies = [
+ "yylib",
+]
+
+[[package]]
+name = "yyos_dinner"
+version = "0.4.0"
+dependencies = [
+ "yylib",
+]
+
+[[package]]
 name = "yyos_elf"
 version = "0.4.0"
 dependencies = [
@@ -458,6 +472,13 @@ dependencies = [
 
 [[package]]
 name = "yyos_factorial"
+version = "0.4.0"
+dependencies = [
+ "yylib",
+]
+
+[[package]]
+name = "yyos_fish"
 version = "0.4.0"
 dependencies = [
  "yylib",
@@ -500,6 +521,13 @@ dependencies = [
  "yyos_boot",
  "yyos_elf",
  "yyos_syscall",
+]
+
+[[package]]
+name = "yyos_mq"
+version = "0.4.0"
+dependencies = [
+ "yylib",
 ]
 
 [[package]]
