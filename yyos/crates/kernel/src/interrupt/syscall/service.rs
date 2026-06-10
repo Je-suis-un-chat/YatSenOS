@@ -1,12 +1,13 @@
 use core::alloc::Layout;
 
 use uefi::proto::device_path::messaging::MasterSlave;
-
+use crate::drivers::filesystem;
 use super::SyscallArgs;
 use crate::proc::manager::get_process_manager;
 use crate::proc::sync::SemaphoreResult;
 use crate::{proc::{self, *}, utils::*};
-use crate::drivers::input::try_pop_key;
+use crate::resource::Resource;
+use storage::FileSystem;
 
 pub fn spawn_process(args: &SyscallArgs) -> usize {
     // FIXME: get app name by args
@@ -44,7 +45,7 @@ pub fn sys_write(args: &SyscallArgs) -> usize {
 
 pub fn sys_read(args: &SyscallArgs) -> usize {
     // FIXME: just like sys_write
-    let fd = args.arg0;
+    let fd = args.arg0 as u8;
     let ptr = args.arg1 as *mut u8;
     let len = args.arg2;
 
@@ -52,23 +53,7 @@ pub fn sys_read(args: &SyscallArgs) -> usize {
         core::slice::from_raw_parts_mut(ptr, len)
     };
 
-    if fd == 0 {
-        let mut read_bytes = 0 ;
-
-        while read_bytes < len {
-            if let Some(ch) = try_pop_key(){
-                buf[read_bytes] = ch;
-                read_bytes += 1;
-            }else{
-                break;
-            }
-        }
-
-        read_bytes
-    }else{
-        0
-    }
-    
+    proc::read(fd, buf) as usize
 }
 
 pub fn exit_process(args: &SyscallArgs, context: &mut ProcessContext) {
@@ -260,4 +245,75 @@ pub fn sys_sem(args: &SyscallArgs, context: &mut ProcessContext)
         _ => context.set_rax(usize::MAX),
     }
     
+}
+
+pub fn sys_list_dir(args: &SyscallArgs) -> usize {
+    let ptr = args.arg0 as *const u8;
+    let len = args.arg1;
+
+    if ptr.is_null() {
+        return 1;
+    }
+
+    let bytes = unsafe {
+        core::slice::from_raw_parts(ptr, len)
+    };
+
+    let path = match core::str::from_utf8(bytes) {
+        Ok(path) => path,
+        Err(_) => return 1,
+    };
+
+    if crate::drivers::filesystem::ls(path) {
+        0
+    } else {
+        1
+    }
+}
+
+pub fn sys_open(args: &SyscallArgs) -> usize{
+    let ptr = args.arg0 as *const u8;
+    let len = args.arg1;
+
+    if ptr.is_null(){
+        return usize::MAX;
+    }
+
+    let bytes = unsafe {
+        core::slice::from_raw_parts(ptr, len)
+    };
+
+    let path = match core::str::from_utf8(bytes){
+        Ok(path) => path,
+        Err(_) => return usize::MAX,
+    };
+
+    let Some(rootfs) = filesystem::get_rootfs() else {
+        return usize::MAX;
+    };
+
+    let file = match rootfs.open_file(path){
+        Ok(file) => file,
+        Err(_) => return usize::MAX,
+    };
+
+    let manager = get_process_manager();
+    let current = manager.current();
+    let process = current.read();
+
+    process.open(Resource::File(file)) as usize
+}
+
+pub fn sys_close(args: &SyscallArgs) -> usize{
+    let fd = args.arg0 as u8;
+
+    let manager = get_process_manager();
+    let current = manager.current();
+    let process = current.read();
+
+    if process.close(fd){
+        0
+    }else{
+        usize::MAX
+    }
 }

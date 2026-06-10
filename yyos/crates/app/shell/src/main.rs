@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+use core::fmt::Arguments;
+
 use lib::*;
 
 extern crate lib;
@@ -38,7 +40,8 @@ fn execute_command(cmd: &str) {
 
     match command {
         "help"    => cmd_help(),
-        "ls"      => cmd_list_apps(),
+        "ls"      => cmd_list_dir(argument),
+        "cat"     => cmd_cat(argument),
         "apps"    => cmd_list_apps(),
         "ps"      => cmd_stat(),
         "stat"    => cmd_stat(),
@@ -56,11 +59,12 @@ fn cmd_help() {
     println!("学号：24312063");
     println!("Available commands:");
     println!("  help        - Show this help message");
-    println!("  ls / apps   - List all available user programs");
+    println!("  ls / apps   - List all Files");
     println!("  ps / stat   - List all running processes");
     println!("  run <name>  - Run a user program by name");
     println!("  clear       - Clear the screen");
     println!("  exit        - Exit the shell");
+    println!("  cat <path>  - Print file contents");
     println!("");
     println!("You can also type a program name directly to run it.");
 }
@@ -117,4 +121,48 @@ fn cmd_run(name: &str) {
 
 fn cmd_clear() {
     print!("\x1b[1;1H\x1b[2J");
+}
+
+fn cmd_list_dir(path: &str) {
+    let path = if path.is_empty() { "/" } else { path };
+
+    if !sys_list_dir(path) {
+        println!("Failed to list directory '{}'.", path);
+    }
+}
+
+fn cmd_cat(path: &str) {
+    if path.is_empty() {
+        println!("Usage: cat <path>");
+        return;
+    }
+
+    let fd = match sys_open(path) {
+        Some(fd) => fd,
+        None => {
+            println!("cat: cannot open '{}'", path);
+            return;
+        }
+    };
+
+    let mut buf = [0u8; 512];
+
+    loop {
+        match sys_read(fd, &mut buf) {
+            Some(0) => break,
+            Some(count) => {
+                if sys_write(1, &buf[..count]).is_none() {
+                    println!("cat: output error");
+                    break;
+                }
+            }
+            None => {
+                println!("cat: read error");
+                break;
+            }
+        }
+    }
+    println!("");
+
+    sys_close(fd);
 }

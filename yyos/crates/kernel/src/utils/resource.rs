@@ -1,6 +1,9 @@
 use alloc::string::String;
-use spin::Mutex;
 use hashbrown::HashMap;
+use spin::Mutex;
+use storage::FileHandle;
+
+use crate::drivers::input::try_pop_key;
 
 #[derive(Debug, Clone)]
 pub enum StdIO {
@@ -59,6 +62,7 @@ impl ResourceSet {
 #[derive(Debug)]
 pub enum Resource {
     Console(StdIO),
+    File(FileHandle),
     Null,
 }
 
@@ -67,11 +71,22 @@ impl Resource {
         match self {
             Resource::Console(stdio) => match stdio {
                 StdIO::Stdin => {
-                    // FIXME: just read from kernel input buffer
-                    Some(0)
+                    let mut count = 0;
+
+                    while count < buf.len() {
+                        let Some(key) = try_pop_key() else {
+                            break;
+                        };
+
+                        buf[count] = key;
+                        count += 1;
+                    }
+
+                    Some(count)
                 }
                 _ => None,
             },
+            Resource::File(file) => file.read(buf).ok(),
             Resource::Null => Some(0),
         }
     }
@@ -89,6 +104,7 @@ impl Resource {
                     Some(buf.len())
                 }
             },
+            Resource::File(_) => None,
             Resource::Null => Some(buf.len()),
         }
     }

@@ -24,3 +24,4 @@ volatile              = { workspace = true }
 x86                   = { workspace = true }
 x86_64                = { workspace = true }
 yyos_syscall = { version = "0.4.0", path = "../syscall" }
+storage = { package = "yyos_storage", path = "../storage" }

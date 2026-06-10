@@ -82,6 +82,12 @@ pub fn dispatcher(context: &mut ProcessContext) {
         Syscall::Unknown => warn!("Unhandled syscall: {:x?}", context.regs.rax),
 
         Syscall::Sem => sys_sem(&args, context),
+
+        Syscall::ListDir => context.set_rax(sys_list_dir(&args)),
+
+        Syscall::Open => context.set_rax(sys_open(&args)),
+
+        Syscall::Close => context.set_rax(sys_close(&args)),
     }
 }
 

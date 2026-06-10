@@ -24,15 +24,15 @@ pub use utils::*;
 pub mod drivers;
 pub use drivers::*;
 
-pub mod memory;
 pub mod interrupt;
+pub mod memory;
 
 pub use alloc::format;
 
 pub mod proc;
 
 use boot::BootInfo;
-use uefi::{Status, runtime::ResetType};
+use uefi::{runtime::ResetType, Status};
 
 pub fn init(boot_info: &'static BootInfo) {
     unsafe {
@@ -49,6 +49,10 @@ pub fn init(boot_info: &'static BootInfo) {
     memory::init(boot_info); // init memory manager
     memory::user::init(); // init user heap allocator
     proc::init(boot_info); // init process manager
+
+    if let Err(err) = filesystem::init() {
+        warn!("Failed to initialize filesystem: {:?}", err);
+    }
 
     x86_64::instructions::interrupts::enable();
     info!("Interrupts Enabled.");

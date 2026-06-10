@@ -1,3 +1,5 @@
+//use std::random::random;
+
 use syscall_def::Syscall;
 
 use crate::syscall;
@@ -100,4 +102,33 @@ pub fn sys_sem_signal(key: u32) -> bool
 pub fn sys_sem_wait(key: u32) -> bool
 {
     syscall!(Syscall::Sem, 3, key as usize) == 0
+}
+#[inline(always)]
+pub fn sys_list_dir(path: &str) -> bool {
+    syscall!(
+        Syscall::ListDir,
+        path.as_ptr() as u64,
+        path.len() as u64
+    ) == 0
+}
+
+#[inline(always)]
+pub fn sys_open(path: &str) -> Option<u8>{
+    let ret = syscall!(
+        Syscall::Open,
+        path.as_ptr() as u64, 
+        path.len() as u64
+    ) as isize;
+
+    if ret < 0{
+        None
+    }else {
+        Some(ret as u8)
+    }
+}
+
+#[inline(always)]
+pub fn sys_close(fd: u8) -> bool{
+    let ret = syscall!(Syscall::Close, fd as u64) as isize;
+    ret == 0
 }

@@ -3,7 +3,7 @@ use hashbrown::HashMap;
 use spin::{rwlock::RwLock};
 
 use super::*;
-use crate::resource::ResourceSet;
+use crate::resource::{self, Resource, ResourceSet};
 use sync::*;
 
 
@@ -62,5 +62,13 @@ impl ProcessData {
 
     pub fn sem_signal(&self, key:u32) -> SemaphoreResult{
         self.semaphores.write().signal(key)
+    }
+
+    pub fn open(&self, resource: Resource) -> u8{
+        self.resources.write().open(resource)
+    }
+
+    pub fn close(&self, fd: u8) -> bool{
+        self.resources.write().close(fd)
     }
 }
