@@ -1,13 +1,15 @@
-use crate::{alloc::string::ToString, errln};
+use alloc::string::ToString;
+
+use crate::errln;
 
 #[macro_export]
 macro_rules! entry {
     ($fn:ident) => {
         #[unsafe(export_name = "_start")]
         pub extern "C" fn __impl_start() {
+            lib::init(); // THIS LINE IS NEW IN LAB 7
             let ret = $fn();
-            // FIXME: after syscall, add lib::sys_exit(ret);
-            $crate::sys_exit(ret);
+            lib::sys_exit(ret);
         }
     };
 }
@@ -31,6 +33,5 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
         info.message()
     );
 
-    // FIXME: after syscall, add lib::sys_exit(1);
     crate::sys_exit(1);
 }

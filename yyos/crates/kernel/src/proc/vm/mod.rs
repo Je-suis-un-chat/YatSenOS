@@ -1,30 +1,44 @@
-use alloc::format;
-use xmas_elf::ElfFile;
+use alloc::{format, vec::Vec};
 use x86_64::{
-    VirtAddr,
-    structures::{
-        idt::PageFaultErrorCode,
-        paging::{mapper::MapToError, page::*, *},
+    structures::paging::{
+        mapper::{CleanUp, UnmapError},
+        page::*,
+        *,
     },
+    VirtAddr,
 };
-
+use xmas_elf::ElfFile;
 use crate::{humanized_size, memory::*};
 
+pub mod heap;
 pub mod stack;
 
-use self::stack::*;
-use super::{PageTableContext, ProcessId};
+use self::{heap::Heap, stack::Stack};
+
+use super::PageTableContext;
+
+// See the documentation for the `KernelPages` type
+// Ignore when you not reach this part
+//
+// use boot::KernelPages;
 
 type MapperRef<'a> = &'a mut OffsetPageTable<'static>;
 type FrameAllocatorRef<'a> = &'a mut BootInfoFrameAllocator;
 
-//虚拟内存：页表+栈
 pub struct ProcessVm {
     // page table is shared by parent and child
     pub(super) page_table: PageTableContext,
 
     // stack is pre-process allocated
     pub(super) stack: Stack,
+
+    // heap is allocated by brk syscall
+    pub(super) heap: Heap,
+
+    // code is hold by the first process
+    // these fields will be empty for other processes
+    pub(super) code: Vec<PageRangeInclusive>,
+    pub(super) code_usage: u64,
 }
 
 impl ProcessVm {
@@ -32,16 +46,30 @@ impl ProcessVm {
         Self {
             page_table,
             stack: Stack::empty(),
+            heap: Heap::empty(),
+            code: Vec::new(),
+            code_usage: 0,
         }
     }
 
-    pub fn from_parts(page_table: PageTableContext, stack: Stack) -> Self {
-        Self { page_table, stack }
-    }
 
-    pub fn stack_top(&self) -> VirtAddr {
-        self.stack.range.end.start_address()
-    }
+    // See the documentation for the `KernelPages` type
+    // Ignore when you not reach this part
+
+    /// Initialize kernel vm
+    ///
+    /// NOTE: this function should only be called by the first process
+    // pub fn init_kernel_vm(mut self, pages: &KernelPages) -> Self {
+    //     // FIXME: record kernel code usage
+    //     self.code = /* The kernel pages */;
+    //     self.code_usage = /* The kernel code usage */;
+
+    //     self.stack = Stack::kstack();
+
+    //     // ignore heap for kernel process as we don't manage it
+
+    //     self
+    // }
 
     pub fn init_kernel_vm(mut self) -> Self {
         // TODO: record kernel code usage
@@ -49,112 +77,90 @@ impl ProcessVm {
         self
     }
 
-    pub fn load_elf(
-        &mut self,
-        elf: &ElfFile,
-        user_access: bool,
-    ) -> Result<(), MapToError<Size4KiB>>{
-    let physical_offset = *crate::memory::PHYSICAL_OFFSET.get().unwrap();
-    let mapper = &mut self.page_table.mapper();
-    let frame_alloc = &mut *get_frame_alloc_for_sure();
-
-    elf::load_elf(elf, physical_offset, mapper, frame_alloc, user_access)
+    pub fn brk(&self, addr: Option<VirtAddr>) -> Option<VirtAddr> {
+        self.heap.brk(
+            addr,
+            &mut self.page_table.mapper(),
+            &mut get_frame_alloc_for_sure(),
+        )
     }
-   
 
-    pub fn init_proc_stack(&mut self, pid: ProcessId) -> VirtAddr {
-        // FIXME: calculate the stack for pid
-        let pid_value = u16::from(pid) as u64;
-        let stack_base = STACK_MAX-STACK_MAX_SIZE*(pid_value+1);
+    pub fn load_elf(&mut self, elf: &ElfFile) {
+        let mapper = &mut self.page_table.mapper();
 
-        // FIXME: calculate the stack for pid
-        let init_bot = stack_base + STACK_MAX_SIZE - STACK_DEF_SIZE;
-        let stack_top_addr = VirtAddr::new(stack_base + STACK_MAX_SIZE - 8);
+        let alloc = &mut *get_frame_alloc_for_sure();
 
+        self.load_elf_code(elf, mapper, alloc);
+        self.stack.init(mapper, alloc);
+    }
+
+    fn load_elf_code(&mut self, elf: &ElfFile, mapper: MapperRef, alloc: FrameAllocatorRef) {
+        // FIXME: make the `load_elf` function return the code pages
+        self.code =
+            elf::load_elf(elf, *PHYSICAL_OFFSET.get().unwrap(), mapper, alloc, true).unwrap();
+
+        // FIXME: calculate code usage
+        self.code_usage = /* The code usage */;
+    }
+
+    pub fn fork(&self, stack_offset_count: u64) -> Self {
+        let owned_page_table = self.page_table.fork();
+        let mapper = &mut owned_page_table.mapper();
+
+        let alloc = &mut *get_frame_alloc_for_sure();
+
+        Self {
+            page_table: owned_page_table,
+            stack: self.stack.fork(mapper, alloc, stack_offset_count),
+            heap: self.heap.fork(),
+
+            // do not share code info
+            code: Vec::new(),
+            code_usage: 0,
+        }
+    }
+
+    pub fn handle_page_fault(&mut self, addr: VirtAddr) -> bool {
         let mapper = &mut self.page_table.mapper();
         let alloc = &mut *get_frame_alloc_for_sure();
 
-        // User process stacks must be USER_ACCESSIBLE (Ring 3)
-        self.stack.init_at(init_bot, mapper, alloc, true);
-
-        stack_top_addr
-    }
-
-    pub fn handle_page_fault(&mut self, addr: VirtAddr, err_code: PageFaultErrorCode) -> bool {
-        // 先尝试栈增长处理
-        {
-            let mapper = &mut self.page_table.mapper();
-            let alloc = &mut *get_frame_alloc_for_sure();
-            if self.stack.handle_page_fault(addr, mapper, alloc) {
-                return true;
-            }
-        }
-
-        // 非栈地址缺页：对于用户空间非保护违例，尝试按需映射
-        let addr_u64 = addr.as_u64();
-
-        if addr_u64 >= 0xffff_8000_0000_0000 {
-            return false;
-        }
-        if err_code.contains(PageFaultErrorCode::PROTECTION_VIOLATION) {
-            warn!(
-                "Protection violation at {:#x} for process, cannot handle",
-                addr_u64
-            );
-            return false;
-        }
-
-        let page = Page::containing_address(addr);
-        let mapper = &mut self.page_table.mapper();
-        let alloc = &mut *get_frame_alloc_for_sure();
-        let flags = PageTableFlags::PRESENT
-            | PageTableFlags::WRITABLE
-            | PageTableFlags::USER_ACCESSIBLE;
-
-        match alloc.allocate_frame() {
-            Some(frame) => {
-                unsafe {
-                    let result = mapper.map_to(page, frame, flags, alloc);
-                    match result {
-                        Ok(flusher) => {
-                            // 清零新分配的帧
-                            let dest = (frame.start_address().as_u64()
-                                + *crate::memory::PHYSICAL_OFFSET.get().unwrap())
-                                as *mut u8;
-                            core::ptr::write_bytes(dest, 0, crate::memory::PAGE_SIZE as usize);
-                            flusher.flush();
-                            true
-                        }
-                        Err(e) => {
-                            error!("Demand paging map_to failed: {:?}", e);
-                            false
-                        }
-                    }
-                }
-            }
-            None => {
-                error!(
-                    "Demand paging: frame allocation failed for {:#x}",
-                    addr_u64
-                );
-                false
-            }
-        }
+        self.stack.handle_page_fault(addr, mapper, alloc)
     }
 
     pub(super) fn memory_usage(&self) -> u64 {
-        self.stack.memory_usage()
+        self.stack.memory_usage() + self.heap.memory_usage() + self.code_usage
     }
 
-    pub fn fork(&self, stack_offset_count: u64) -> Self{
-        let page_table = self.page_table.fork();
+    pub(super) fn clean_up(&mut self) -> Result<(), UnmapError> {
+        let mapper = &mut self.page_table.mapper();
+        let dealloc = &mut *get_frame_alloc_for_sure();
 
-        let mut mapper = page_table.mapper();
-        let mut alloc = get_frame_alloc_for_sure();
+        // FIXME: implement the `clean_up` function for `Stack`
+        self.stack.clean_up(mapper, dealloc)?;
 
-        let stack = self.stack.fork(&mut mapper, &mut alloc, stack_offset_count,);
+        if self.page_table.using_count() == 1 {
+            // free heap
+            // FIXME: implement the `clean_up` function for `Heap`
+            self.heap.clean_up(mapper, dealloc)?;
 
-        Self { page_table, stack }
+            // free code
+            for page_range in self.code.iter() {
+                elf::unmap_range(*page_range, mapper, dealloc, true)?;
+            }
+
+            unsafe {
+                // free P1-P3
+                mapper.clean_up(dealloc);
+
+                // free P4
+                dealloc.deallocate_frame(self.page_table.reg.addr);
+            }
+        }
+
+        // NOTE: maybe print how many frames are recycled
+        //       **you may need to add some functions to `BootInfoFrameAllocator`**
+
+        Ok(())
     }
 }
 
@@ -164,6 +170,7 @@ impl core::fmt::Debug for ProcessVm {
 
         f.debug_struct("ProcessVm")
             .field("stack", &self.stack)
+            .field("heap", &self.heap)
             .field("memory_usage", &format!("{} {}", size, unit))
             .field("page_table", &self.page_table)
             .finish()
