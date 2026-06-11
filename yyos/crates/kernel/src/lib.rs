@@ -32,7 +32,7 @@ pub use alloc::format;
 pub mod proc;
 
 use boot::BootInfo;
-use uefi::{runtime::ResetType, Status};
+use uefi::{Status, runtime::ResetType};
 
 pub fn init(boot_info: &'static BootInfo) {
     unsafe {
@@ -41,7 +41,14 @@ pub fn init(boot_info: &'static BootInfo) {
     }
 
     serial::init(); // init serial output
+    framebuffer::init(boot_info.frame_buffer, boot_info.physical_memory_offset);
     logger::init(); // init logger system
+    if let Some(info) = boot_info.frame_buffer {
+        info!(
+            "Framebuffer Initialized: {}x{}, stride {}, {:?}",
+            info.width, info.height, info.stride, info.pixel_format
+        );
+    }
     memory::address::init(boot_info);
     memory::gdt::init(); // init gdt
     memory::allocator::init(); // init kernel heap allocator

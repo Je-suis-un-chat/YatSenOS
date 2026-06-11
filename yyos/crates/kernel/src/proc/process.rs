@@ -1,4 +1,7 @@
-use alloc::{sync::{Arc, Weak}, vec::Vec};
+use alloc::{
+    sync::{Arc, Weak},
+    vec::Vec,
+};
 
 use spin::*;
 use xmas_elf::ElfFile;
@@ -6,7 +9,6 @@ use xmas_elf::ElfFile;
 use super::*;
 use crate::proc::vm::stack::{STACK_MAX_SIZE, STACK_START_MASK};
 use context::*;
-
 
 pub struct Process {
     pid: ProcessId,
@@ -40,7 +42,6 @@ impl Process {
     pub fn read(&self) -> RwLockReadGuard<ProcessInner> {
         self.inner.read()
     }
-
 
     pub fn new(
         name: String,
@@ -124,8 +125,7 @@ impl Process {
 }
 
 impl ProcessInner {
-    pub fn init_stack_frame(&mut self,entry:VirtAddr,stack_top:VirtAddr)
-    {
+    pub fn init_stack_frame(&mut self, entry: VirtAddr, stack_top: VirtAddr) {
         self.context.init_stack_frame(entry, stack_top);
     }
     pub fn name(&self) -> &str {
@@ -245,7 +245,17 @@ impl ProcessInner {
         context.relocate_stack(old_stack_start, old_stack_end, stack_offset);
         context.set_rax(0);
 
-        ProcessInner { name: format!("{}_forked", self.name), parent: Some(parent), children: Vec::new(), ticks_passed: 0, status: ProgramStatus::Ready, context, exit_code: None, proc_data: self.proc_data.clone(), proc_vm: Some(proc_vm), }
+        ProcessInner {
+            name: format!("{}_forked", self.name),
+            parent: Some(parent),
+            children: Vec::new(),
+            ticks_passed: 0,
+            status: ProgramStatus::Ready,
+            context,
+            exit_code: None,
+            proc_data: self.proc_data.clone(),
+            proc_vm: Some(proc_vm),
+        }
     }
 
     pub fn block(&mut self){
@@ -300,7 +310,10 @@ impl core::fmt::Debug for Process {
             .field("parent", &inner.parent().map(|p| p.pid))
             .field("status", &inner.status)
             .field("ticks_passed", &inner.ticks_passed)
-            .field("memory_usage", &format!("{:.3} {}", memory_size, memory_unit))
+            .field(
+                "memory_usage",
+                &format!("{:.3} {}", memory_size, memory_unit),
+            )
             .field("children", &inner.children.iter().map(|c| c.pid.0))
             .field("status", &inner.status)
             .field("context", &inner.context)

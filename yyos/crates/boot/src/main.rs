@@ -6,7 +6,12 @@ extern crate log;
 extern crate alloc;
 
 use uefi::mem::memory_map::MemoryMap;
-use uefi::{Status, entry, boot::MemoryType};
+use uefi::{
+    Status,
+    boot::{self, MemoryType},
+    entry,
+    proto::console::gop::PixelFormat,
+};
 use x86_64::registers::control::*;
 use yyos_boot::*;
 
@@ -87,8 +92,10 @@ fn efi_main() -> Status {
         stack_size,
         &mut page_table,
         &mut frame_allocator,
-        x86_64::structures::paging::PageTableFlags::PRESENT | x86_64::structures::paging::PageTableFlags::WRITABLE,
-    ).expect("Failed to map kernel stack");
+        x86_64::structures::paging::PageTableFlags::PRESENT
+            | x86_64::structures::paging::PageTableFlags::WRITABLE,
+    )
+    .expect("Failed to map kernel stack");
 
     unsafe {
         Cr0::update(|f| f.insert(Cr0Flags::WRITE_PROTECT));
@@ -104,6 +111,8 @@ fn efi_main() -> Status {
         None
     };
 
+    let frame_buffer = get_frame_buffer_info();
+
     // 5. 准备系统表
     let ptr = uefi::table::system_table_raw().expect("Failed to get system table");
     let system_table = ptr.cast::<core::ffi::c_void>();
@@ -117,6 +126,7 @@ fn efi_main() -> Status {
         physical_memory_offset: config.physical_memory_offset,
         system_table,
         kernel_pages,
+        frame_buffer,
         loaded_apps,
     };
 
@@ -124,4 +134,31 @@ fn efi_main() -> Status {
     jump_to_entry(&bootinfo, stacktop)
 }
 
+fn get_frame_buffer_info() -> Option<FrameBufferInfo> {
+    let handle = boot::get_handle_for_protocol::<GraphicsOutput>().ok()?;
+    let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(handle).ok()?;
+    let mode = gop.current_mode_info();
+    let (width, height) = mode.resolution();
+    let stride = mode.stride();
+    let pixel_format = match mode.pixel_format() {
+        PixelFormat::Rgb => FrameBufferPixelFormat::Rgb,
+        PixelFormat::Bgr => FrameBufferPixelFormat::Bgr,
+        _ => FrameBufferPixelFormat::Unknown,
+    };
+    let mut frame_buffer = gop.frame_buffer();
+    let info = FrameBufferInfo {
+        address: frame_buffer.as_mut_ptr() as u64,
+        size: frame_buffer.size(),
+        width,
+        height,
+        stride,
+        pixel_format,
+    };
 
+    info!(
+        "GOP framebuffer: {}x{}, stride {}, format {:?}, address {:#x}, size {:#x}",
+        width, height, stride, pixel_format, info.address, info.size
+    );
+
+    Some(info)
+}

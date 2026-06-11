@@ -10,6 +10,7 @@ bit_field             = { workspace = true }
 bitflags              = { workspace = true }
 boot                  = { workspace = true }
 crossbeam-queue       = { workspace = true }
+embedded-graphics     = { workspace = true }
 elf                   = { workspace = true }
 hashbrown             = { workspace = true }
 lazy_static           = { workspace = true }
@@ -17,6 +18,7 @@ libm                  = { workspace = true }
 linked_list_allocator = { workspace = true }
 log                   = { workspace = true }
 paste                 = { workspace = true }
+pc-keyboard           = { workspace = true }
 spin                  = { workspace = true }
 xmas-elf              = { workspace = true }
 uefi                  = { workspace = true }

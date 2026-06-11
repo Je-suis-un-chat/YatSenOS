@@ -2,7 +2,10 @@ use core::{arch::asm, fmt::*, panic::Location};
 
 use x86_64::instructions::interrupts;
 
-use crate::drivers::serial::{SERIAL, get_serial};
+use crate::drivers::{
+    framebuffer,
+    serial::{SERIAL, get_serial},
+};
 
 /// Use spin mutex to control variable access
 #[macro_export]
@@ -62,6 +65,7 @@ pub fn print_internal(args: Arguments) {
         if let Some(mut serial) = get_serial() {
             serial.write_fmt(args).unwrap();
         }
+        framebuffer::write_fmt(args);
     });
 }
 

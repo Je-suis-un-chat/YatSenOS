@@ -1,8 +1,8 @@
 use alloc::format;
 
 // NOTE: import `yyos_syscall` package as `syscall_def` in Cargo.toml
-use yyos_syscall::Syscall;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
+use yyos_syscall::Syscall;
 
 use crate::{memory::gdt, proc::*};
 
@@ -90,7 +90,6 @@ pub fn dispatcher(context: &mut ProcessContext) {
         Syscall::Close => context.set_rax(sys_close(&args)),
     }
 }
-
 
 impl SyscallArgs {
     pub fn new(syscall: Syscall, arg0: usize, arg1: usize, arg2: usize) -> Self {

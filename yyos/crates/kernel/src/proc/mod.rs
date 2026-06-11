@@ -5,10 +5,15 @@ pub mod paging;
 pub mod pid;
 pub mod process;
 pub mod processor;
-pub mod vm;
 pub mod sync;
+pub mod vm;
 
-use alloc::{format, string::{String, ToString}, vec::Vec, sync::Arc};
+use alloc::{
+    format,
+    string::{String, ToString},
+    sync::Arc,
+    vec::Vec,
+};
 use xmas_elf::ElfFile;
 
 pub use context::ProcessContext;
@@ -18,7 +23,7 @@ pub use paging::PageTableContext;
 pub use pid::ProcessId;
 use process::*;
 use vm::ProcessVm;
-use x86_64::{VirtAddr, structures::{idt::PageFaultErrorCode}};
+use x86_64::{VirtAddr, structures::idt::PageFaultErrorCode};
 
 use crate::memory::allocator::HEAP_SIZE;
 pub const KERNEL_PID: ProcessId = ProcessId(1);
@@ -248,6 +253,5 @@ pub fn wait_pid(pid: ProcessId, context:&mut ProcessContext){
         manager.save_current(context);
         manager.current().write().block();
         manager.switch_next(context);
-        
     })
 }

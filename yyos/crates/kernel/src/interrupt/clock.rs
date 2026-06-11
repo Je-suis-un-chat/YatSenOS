@@ -1,11 +1,9 @@
 use super::consts::*;
 // 引入原子类型和内存排序规则
+use crate::memory::gdt::CLOCK_IST_INDEX;
+use crate::proc::{ProcessContext, switch};
 use core::sync::atomic::{AtomicU64, Ordering};
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
-use crate::as_handler;
-use crate::proc::{switch,ProcessContext};
-use crate::memory::gdt::CLOCK_IST_INDEX;
-
 
 as_handler!(clock);
 pub unsafe fn register_idt(idt: &mut InterruptDescriptorTable) {
@@ -31,12 +29,9 @@ pub fn inc_counter() -> u64 {
 
 pub fn clock(context: &mut ProcessContext) {
     x86_64::instructions::interrupts::without_interrupts(|| {
-        /*if inc_counter() % 0x100 == 0 {
-            info!("Tick! @{}", read_counter());
-        }*/
+        let ticks = inc_counter();
+        crate::drivers::framebuffer::update_clock(ticks);
         switch(context);
         super::ack();
     });
 }
-
-

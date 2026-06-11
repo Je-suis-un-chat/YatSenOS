@@ -4,8 +4,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use x86_64::{
     VirtAddr, align_up,
     structures::paging::{
-        FrameAllocator, FrameDeallocator, Mapper, Page, PageTableFlags,
-        mapper::UnmapError,
+        FrameAllocator, FrameDeallocator, Mapper, Page, PageTableFlags, mapper::UnmapError,
     },
 };
 
@@ -74,10 +73,7 @@ impl Heap {
         let requested_mapped_end = align_up(requested, crate::memory::PAGE_SIZE);
         trace!(
             "Adjust heap break: {:#x} -> {:#x} (mapped: {:#x} -> {:#x})",
-            current,
-            requested,
-            current_mapped_end,
-            requested_mapped_end
+            current, requested, current_mapped_end, requested_mapped_end
         );
 
         if requested_mapped_end > current_mapped_end {
@@ -124,19 +120,9 @@ impl Heap {
         Some(new_end)
     }
 
-    fn rollback_growth(
-        start: Page,
-        end: Page,
-        mapper: MapperRef,
-        dealloc: FrameAllocatorRef,
-    ) {
+    fn rollback_growth(start: Page, end: Page, mapper: MapperRef, dealloc: FrameAllocatorRef) {
         if start < end {
-            let _ = elf::unmap_range(
-                Page::range_inclusive(start, end - 1),
-                mapper,
-                dealloc,
-                true,
-            );
+            let _ = elf::unmap_range(Page::range_inclusive(start, end - 1), mapper, dealloc, true);
         }
     }
 

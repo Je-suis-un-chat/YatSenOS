@@ -2,7 +2,7 @@ OVMF := assets/OVMF.fd
 ESP := esp
 BUILD_ARGS :=
 QEMU_ARGS := -m 96M
-QEMU_OUTPUT := -nographic
+QEMU_OUTPUT := -serial stdio
 MODE ?= release
 CUR_PATH := $(shell pwd)
 APP_PATH := $(CUR_PATH)/crates/app
@@ -27,12 +27,15 @@ ifeq (${MODE}, release)
 	BUILD_ARGS := --release
 endif
 
-.PHONY: build run debug clean launch intdbg \
+.PHONY: build run run-headless debug clean launch intdbg \
 	target/x86_64-unknown-uefi/$(MODE)/yyos_boot.efi \
 	target/x86_64-unknown-none/$(PROFILE)/yyos_kernel \
 	target/x86_64-unknown-yyos/$(MODE)
 
 run: build launch
+
+run-headless: QEMU_OUTPUT := -nographic
+run-headless: build launch
 
 launch:
 	@qemu-system-x86_64 \

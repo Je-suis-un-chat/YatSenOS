@@ -1,6 +1,10 @@
 use x86_64::{
     VirtAddr,
-    structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, mapper::{MapToError, UnmapError}, page::*},
+    structures::paging::{
+        FrameAllocator, Mapper, Page, PageTableFlags,
+        mapper::{MapToError, UnmapError},
+        page::*,
+    },
 };
 
 use super::{FrameAllocatorRef, MapperRef};
@@ -86,7 +90,8 @@ impl Stack {
 
     pub fn init(&mut self, mapper: MapperRef, alloc: FrameAllocatorRef) {
         debug_assert!(self.usage == 0, "Stack is not empty.");
-        let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE;
+        let flags =
+            PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE;
         self.range = elf::map_range(STACK_INIT_BOT, STACK_DEF_PAGE, mapper, alloc, flags).unwrap();
         self.usage = STACK_DEF_PAGE;
         self.user_access = true;
@@ -182,8 +187,12 @@ impl Stack {
         Ok(())
     }
 
-    pub fn fork(&self, mapper: MapperRef, alloc: FrameAllocatorRef, stack_offset_count: u64,)
-    -> Self{
+    pub fn fork(
+        &self,
+        mapper: MapperRef,
+        alloc: FrameAllocatorRef,
+        stack_offset_count: u64,
+    ) -> Self {
         let stack_offset = stack_offset_count * STACK_MAX_SIZE;
         let offset_pages = stack_offset / crate::memory::PAGE_SIZE;
 

@@ -1,7 +1,7 @@
 use core::alloc::Layout;
 
-use crate::drivers::filesystem;
 use super::SyscallArgs;
+use crate::drivers::filesystem;
 use crate::proc::manager::get_process_manager;
 use crate::proc::sync::SemaphoreResult;
 use crate::proc::{self, *};
@@ -20,9 +20,7 @@ pub fn sys_read(args: &SyscallArgs) -> usize {
     let ptr = args.arg1 as *mut u8;
     let len = args.arg2;
 
-    let buf = unsafe {
-        core::slice::from_raw_parts_mut(ptr, len)
-    };
+    let buf = unsafe { core::slice::from_raw_parts_mut(ptr, len) };
 
     proc::read(fd, buf) as usize
 }
@@ -174,8 +172,7 @@ pub fn sem_wait(key: u32, context: &mut ProcessContext){
         }
     })
 }
-pub fn sem_signal(key: u32,context: &mut ProcessContext)
-{
+pub fn sem_signal(key: u32, context: &mut ProcessContext) {
     let manager = get_process_manager();
 
     match manager.current().read().sem_signal(key){
@@ -222,7 +219,6 @@ pub fn sys_sem(args: &SyscallArgs, context: &mut ProcessContext)
         3 => sem_wait(args.arg1 as u32, context),
         _ => context.set_rax(usize::MAX),
     }
-    
 }
 
 pub fn sys_list_dir(args: &SyscallArgs) -> usize {
@@ -233,9 +229,7 @@ pub fn sys_list_dir(args: &SyscallArgs) -> usize {
         return 1;
     }
 
-    let bytes = unsafe {
-        core::slice::from_raw_parts(ptr, len)
-    };
+    let bytes = unsafe { core::slice::from_raw_parts(ptr, len) };
 
     let path = match core::str::from_utf8(bytes) {
         Ok(path) => path,
@@ -257,9 +251,7 @@ pub fn sys_open(args: &SyscallArgs) -> usize{
         return usize::MAX;
     }
 
-    let bytes = unsafe {
-        core::slice::from_raw_parts(ptr, len)
-    };
+    let bytes = unsafe { core::slice::from_raw_parts(ptr, len) };
 
     let path = match core::str::from_utf8(bytes){
         Ok(path) => path,

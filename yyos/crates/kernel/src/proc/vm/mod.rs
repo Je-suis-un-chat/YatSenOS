@@ -162,7 +162,6 @@ impl ProcessVm {
             unsafe {
                 // free P1-P3
                 mapper.clean_up(dealloc);
-
             }
         }
 

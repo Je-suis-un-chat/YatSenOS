@@ -29,6 +29,23 @@ extern crate log;
 /// kernel.
 pub type KernelPages = ArrayVec<PageRangeInclusive, 16>;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FrameBufferPixelFormat {
+    Rgb,
+    Bgr,
+    Unknown,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct FrameBufferInfo {
+    pub address: u64,
+    pub size: usize,
+    pub width: usize,
+    pub height: usize,
+    pub stride: usize,
+    pub pixel_format: FrameBufferPixelFormat,
+}
+
 pub struct BootInfo {
     /// The memory map
     pub memory_map: ArrayVec<MemoryDescriptor, 256>,
@@ -42,6 +59,9 @@ pub struct BootInfo {
 
     /// Pages occupied by loadable kernel ELF segments.
     pub kernel_pages: KernelPages,
+
+    /// UEFI GOP framebuffer information.
+    pub frame_buffer: Option<FrameBufferInfo>,
 
     /// Loaded apps
     pub loaded_apps: Option<AppList>,
@@ -130,6 +150,3 @@ impl<'a> Clone for App<'a> {
 }
 
 pub type AppList = ArrayVec<App<'static>, 16>;
-
-
- 

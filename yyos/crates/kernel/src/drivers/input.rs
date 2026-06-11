@@ -1,8 +1,6 @@
 use alloc::string::String;
 use crossbeam_queue::ArrayQueue;
 
-use crate::serial;
-
 pub type Key = u8;
 
 lazy_static!{

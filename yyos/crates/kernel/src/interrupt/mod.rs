@@ -1,8 +1,9 @@
 mod apic;
-mod consts;
 pub mod clock;
-mod serial;
+mod consts;
 mod exceptions;
+mod keyboard;
+mod serial;
 pub mod syscall;
 
 use apic::*;
@@ -17,6 +18,7 @@ lazy_static! {
             exceptions::register_idt(&mut idt);
             clock::register_idt(&mut idt);
             serial::register_idt(&mut idt);
+            keyboard::register_idt(&mut idt);
             syscall::register_idt(&mut idt);
         }
         idt
@@ -39,7 +41,8 @@ pub fn init() {
         //将其路由至CPU 0(主核)
         enable_irq(4,0);
         
-        //启用时钟中断
+        //启用键盘和时钟中断
+        enable_irq(1,0);
         enable_irq(0,0);
         //开启CPU的中断响应开关
         //x86_64::instructions::interrupts::enable();

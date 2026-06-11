@@ -1,8 +1,3 @@
-use alloc::{collections::*, format, sync::{Arc, Weak}, string::String};
-use xmas_elf::ElfFile;
-use hashbrown::HashMap;
-use spin::{Mutex, RwLock};
-use x86_64::VirtAddr;
 use super::*;
 use crate::memory::{
     PAGE_SIZE,
@@ -10,8 +5,16 @@ use crate::memory::{
     get_frame_alloc_for_sure,
 };
 use crate::utils::macros::*;
-
-
+use alloc::{
+    collections::*,
+    format,
+    string::String,
+    sync::{Arc, Weak},
+};
+use hashbrown::HashMap;
+use spin::{Mutex, RwLock};
+use x86_64::VirtAddr;
+use xmas_elf::ElfFile;
 
 pub static PROCESS_MANAGER: spin::Once<ProcessManager> = spin::Once::new();
 
@@ -39,7 +42,8 @@ impl ProcessManager {
     pub fn new(init: Arc<Process>, app_list:Option<boot::AppList>) -> Self {
         let mut processes = HashMap::default();
         let ready_queue = VecDeque::new();
-        let wait_queue: HashMap<ProcessId, BTreeSet<ProcessId>, ahash::RandomState> = HashMap::default();
+        let wait_queue: HashMap<ProcessId, BTreeSet<ProcessId>, ahash::RandomState> =
+            HashMap::default();
         let pid = init.pid();
 
         trace!("Init {:#?}", init);
@@ -214,7 +218,8 @@ impl ProcessManager {
     }
 
     pub fn print_process_list(&self) {
-        let mut output = String::from("  PID | PPID | Process Name |  Ticks  |   Memory    | Status\n");
+        let mut output =
+            String::from("  PID | PPID | Process Name |  Ticks  |   Memory    | Status\n");
 
         self.processes
             .read()
@@ -335,7 +340,11 @@ impl ProcessManager {
     pub fn wait_pid(&self, pid:ProcessId){
         let current= processor::get_pid();
 
-        self.wait_queue.lock().entry(pid).or_default().insert(current);
+        self.wait_queue
+            .lock()
+            .entry(pid)
+            .or_default()
+            .insert(current);
     }
 
     pub fn wake_up_waiter(&self, pid: ProcessId, ret: isize){
@@ -356,8 +365,6 @@ impl ProcessManager {
             }
         }
     }
-
-
 }
 
 fn format_usage(name: &str, used: usize, total: usize) -> String {

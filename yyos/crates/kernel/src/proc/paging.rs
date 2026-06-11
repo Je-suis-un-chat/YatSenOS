@@ -42,7 +42,7 @@ impl PageTableContext {
     pub fn new() -> Self {
         let (frame, flags) = Cr3::read();
         Self {
-            reg: Arc::new(Cr3RegValue::new(frame, flags, false,)),
+            reg: Arc::new(Cr3RegValue::new(frame, flags, false)),
         }
     }
     
@@ -65,7 +65,7 @@ impl PageTableContext {
 
         // 3. create page table object
         Self {
-            reg: Arc::new(Cr3RegValue::new(page_table_addr, Cr3Flags::empty(), true,)),
+            reg: Arc::new(Cr3RegValue::new(page_table_addr, Cr3Flags::empty(), true)),
         }
     }
 
