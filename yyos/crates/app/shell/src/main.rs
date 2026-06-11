@@ -59,7 +59,7 @@ fn cmd_help() {
     println!("学号：24312063");
     println!("Available commands:");
     println!("  help        - Show this help message");
-    println!("  ls / apps   - List all Files");
+    println!("  ls / apps   - List all Files / apps");
     println!("  ps / stat   - List all running processes");
     println!("  run <name>  - Run a user program by name");
     println!("  clear       - Clear the screen");
