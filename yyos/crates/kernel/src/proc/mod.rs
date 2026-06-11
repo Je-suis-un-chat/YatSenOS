@@ -18,9 +18,9 @@ pub use paging::PageTableContext;
 pub use pid::ProcessId;
 use process::*;
 use vm::ProcessVm;
-use x86_64::{VirtAddr, structures::{idt::PageFaultErrorCode, tss::InvalidIoMap::IoMapBeforeTss}};
+use x86_64::{VirtAddr, structures::{idt::PageFaultErrorCode}};
 
-use crate::memory::{PAGE_SIZE, allocator::HEAP_SIZE};
+use crate::memory::allocator::HEAP_SIZE;
 pub const KERNEL_PID: ProcessId = ProcessId(1);
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -33,7 +33,7 @@ pub enum ProgramStatus {
 
 /// init process manager
 pub fn init(boot_info: &'static boot::BootInfo) {
-    let proc_vm = ProcessVm::new(PageTableContext::new()).init_kernel_vm();
+    let proc_vm = ProcessVm::new(PageTableContext::new()).init_kernel_vm(&boot_info.kernel_pages);
 
     trace!("Init kernel vm: {:#?}", proc_vm);
      
@@ -41,7 +41,7 @@ pub fn init(boot_info: &'static boot::BootInfo) {
     
      // 从 boot.conf 配置中获取的信息（硬编码或从配置解析）
     proc_data.set_env("KERNEL_STACK_ADDR", "0xFFFFFF0100000000");
-    proc_data.set_env("KERNEL_STACK_SIZE", "512");
+    proc_data.set_env("KERNEL_STACK_SIZE", "1048576");
     proc_data.set_env("KERNEL_PATH", "\\KERNEL.ELF");
         
     // 从 BootInfo 获取的信息
@@ -53,7 +53,6 @@ pub fn init(boot_info: &'static boot::BootInfo) {
 
     // kernel process
     let kproc = { 
-        /* FIXME: create kernel process */
         Process::new(
             String::from("kernel"),
             None,
@@ -69,7 +68,6 @@ pub fn init(boot_info: &'static boot::BootInfo) {
 
 pub fn switch(context: &mut ProcessContext) {
     x86_64::instructions::interrupts::without_interrupts(|| {
-        // FIXME: switch to the next process
         get_process_manager().save_current(context);
 
         let current = get_process_manager().current();
@@ -125,7 +123,6 @@ pub fn handle_page_fault(addr: VirtAddr, err_code: PageFaultErrorCode) -> bool {
     })
 }
 
-// FIXME: implement list_app
 pub fn list_app() {
     // 占位函数，后续实验需要实现：遍历并列出可用的 app
     x86_64::instructions::interrupts::without_interrupts(|| {
@@ -142,13 +139,10 @@ pub fn list_app() {
             .collect::<Vec<&str>>()
             .join(", ");
 
-        // TODO: print more information like size, entry point, etc.
-
         println!("[+] App list: {}", apps);
     });
 }
 
-// FIXME: implement spawn
 pub fn spawn(name: &str) -> Option<ProcessId> {
     // 占位函数，后续实验需要实现：解析 app 的 ELF 文件，并创建用户态进程
     let app = x86_64::instructions::interrupts::without_interrupts(|| {
@@ -173,6 +167,12 @@ pub fn elf_spawn(name: String, elf: &ElfFile) -> Option<ProcessId> {
     Some(pid)
 }
 
+pub fn brk(addr: Option<VirtAddr>) -> Option<VirtAddr> {
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        get_process_manager().current().read().brk(addr)
+    })
+}
+
 pub fn read(fd: u8, buf: &mut [u8]) -> isize {
     x86_64::instructions::interrupts::without_interrupts(|| get_process_manager().read(fd, buf))
 }
@@ -184,7 +184,6 @@ pub fn write(fd: u8, buf: &[u8]) -> isize {
 pub fn exit(ret: isize, context: &mut ProcessContext) {
     x86_64::instructions::interrupts::without_interrupts(|| {
         let manager = get_process_manager();
-        // FIXME: implement this for ProcessManager
         let exiting = manager.current();
 
         exiting.kill(ret);

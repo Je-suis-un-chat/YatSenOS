@@ -7,7 +7,6 @@ use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
 use crate::{memory::gdt, proc::*};
 
 mod service;
-// FIXME: write syscall service handler in `service.rs`
 use service::*;
 
 use super::consts;
@@ -51,6 +50,7 @@ pub fn dispatcher(context: &mut ProcessContext) {
         Syscall::Read => context.set_rax(sys_read(&args)),
         // fd: arg0 as u8, buf: &[u8] (ptr: arg1 as *const u8, len: arg2)
         Syscall::Write => context.set_rax(sys_write(&args)),
+        Syscall::Brk => context.set_rax(sys_brk(&args)),
 
         // None -> pid: u16
         Syscall::GetPid => context.set_rax(sys_getpid()),

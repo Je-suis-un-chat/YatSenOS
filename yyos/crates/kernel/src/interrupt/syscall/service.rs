@@ -1,50 +1,21 @@
 use core::alloc::Layout;
 
-use uefi::proto::device_path::messaging::MasterSlave;
 use crate::drivers::filesystem;
 use super::SyscallArgs;
 use crate::proc::manager::get_process_manager;
 use crate::proc::sync::SemaphoreResult;
-use crate::{proc::{self, *}, utils::*};
+use crate::proc::{self, *};
 use crate::resource::Resource;
 use storage::FileSystem;
-
-pub fn spawn_process(args: &SyscallArgs) -> usize {
-    // FIXME: get app name by args
-    //       - core::str::from_utf8_unchecked
-    //       - core::slice::from_raw_parts
-    // FIXME: spawn the process by name
-    // FIXME: handle spawn error, return 0 if failed
-    // FIXME: return pid as usize
-
-    0
-}
+use x86_64::VirtAddr;
 
 pub fn sys_write(args: &SyscallArgs) -> usize {
-    // FIXME: get buffer and fd by args
-    let fd = args.arg0;
-    let ptr = args.arg1 as *const u8;
-    let len =args.arg2;
-
-    let buf = unsafe {
-        core::slice::from_raw_parts(ptr, len)
-    };
-    
-    // FIXME: call proc::write -> isize
-    // FIXME: return the result as usize
-    if fd == 1 || fd == 2{
-        if let Ok(s) = core::str::from_utf8(buf){
-            print!("{}", s);
-        }
-        len as usize
-    }else{
-        0
-    }
-   
+    let fd = args.arg0 as u8;
+    let buf = unsafe { core::slice::from_raw_parts(args.arg1 as *const u8, args.arg2) };
+    proc::write(fd, buf) as usize
 }
 
 pub fn sys_read(args: &SyscallArgs) -> usize {
-    // FIXME: just like sys_write
     let fd = args.arg0 as u8;
     let ptr = args.arg1 as *mut u8;
     let len = args.arg2;
@@ -56,12 +27,19 @@ pub fn sys_read(args: &SyscallArgs) -> usize {
     proc::read(fd, buf) as usize
 }
 
-pub fn exit_process(args: &SyscallArgs, context: &mut ProcessContext) {
-    // FIXME: exit process with retcode
-}
+pub fn sys_brk(args: &SyscallArgs) -> usize {
+    let new_end = if args.arg0 == 0 {
+        None
+    } else {
+        match VirtAddr::try_new(args.arg0 as u64) {
+            Ok(addr) => Some(addr),
+            Err(_) => return usize::MAX,
+        }
+    };
 
-pub fn list_process() {
-    // FIXME: list all processes
+    proc::brk(new_end)
+        .map(|addr| addr.as_u64() as usize)
+        .unwrap_or(usize::MAX)
 }
 
 pub fn sys_allocate(args: &SyscallArgs) -> usize {

@@ -55,7 +55,7 @@ xmas-elf              = "0.10"
 
 boot        = { path = "crates/boot", default-features = false, package = "yyos_boot" }
 elf         = { path = "crates/elf", package = "yyos_elf" }
-lib         = { path = "crates/lib", package = "yylib" }
+lib         = { path = "crates/lib", package = "yslib" }
 syscall_def = { path = "crates/syscall", package = "yyos_syscall" }
 
 [workspace.dependencies.ahash]

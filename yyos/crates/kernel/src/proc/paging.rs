@@ -1,4 +1,4 @@
-use alloc::{borrow::Cow::Owned, sync::Arc};
+use alloc::sync::Arc;
 use core::ptr::copy_nonoverlapping;
 
 use x86_64::{
@@ -27,23 +27,9 @@ impl Drop for Cr3RegValue {
             return;
         }
 
-        trace!(
-            "Releasing page table at {:?}",
-            self.addr
-        );
-
-        let mut allocator = get_frame_alloc_for_sure();
-
+        trace!("Releasing level 4 page table at {:?}", self.addr);
         unsafe {
-            // 释放用户页面以及用户页表分支
-            release_user_table(
-                self.addr,
-                4,
-                &mut allocator,
-            );
-
-            // 最后释放 L4 自身
-            allocator.deallocate_frame(self.addr);
+            get_frame_alloc_for_sure().deallocate_frame(self.addr);
         }
     }
 }
@@ -113,71 +99,5 @@ impl core::fmt::Debug for PageTableContext {
             .field("addr", &self.reg.addr)
             .field("flags", &self.reg.flags)
             .finish()
-    }
-}
-
-unsafe fn release_user_table(
-    frame: PhysFrame,
-    level: u8,
-    allocator: &mut BootInfoFrameAllocator,
-) {
-    let table_ptr =
-        physical_to_virtual(frame.start_address().as_u64())
-            as *mut PageTable;
-
-    let table = unsafe { &mut *table_ptr };
-
-    for index in 0..512 {
-        // The user heap is mapped in the kernel page table and inherited by
-        // every process through the shallow L4 clone. It is globally owned.
-        let shared_heap_l4 =
-            (crate::memory::user::USER_HEAP_START >> 39) & 0x1ff;
-        if level == 4 && index == shared_heap_l4 {
-            continue;
-        }
-
-        let entry = &mut table[index];
-        let flags = entry.flags();
-
-        if !flags.contains(PageTableFlags::PRESENT)
-            || !flags.contains(PageTableFlags::USER_ACCESSIBLE)
-        {
-            continue;
-        }
-
-        let mapped_frame = match entry.frame() {
-            Ok(frame) => frame,
-            Err(_) => continue,
-        };
-
-        if level == 1 {
-            // L1 表项指向用户数据、栈、堆等物理页
-            entry.set_unused();
-
-            unsafe {
-                allocator.deallocate_frame(mapped_frame);
-            }
-        } else {
-            // 本实验用户映射使用 4 KiB 页面
-            assert!(
-                !flags.contains(PageTableFlags::HUGE_PAGE),
-                "User huge pages are not supported"
-            );
-
-            unsafe {
-                release_user_table(
-                    mapped_frame,
-                    level - 1,
-                    allocator,
-                );
-            }
-
-            entry.set_unused();
-
-            // 释放下一层页表自身占用的物理帧
-            unsafe {
-                allocator.deallocate_frame(mapped_frame);
-            }
-        }
     }
 }

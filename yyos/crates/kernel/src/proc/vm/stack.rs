@@ -1,7 +1,6 @@
-use x86::current;
 use x86_64::{
     VirtAddr,
-    structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, mapper::MapToError, page::*},
+    structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, mapper::{MapToError, UnmapError}, page::*},
 };
 
 use super::{FrameAllocatorRef, MapperRef};
@@ -27,20 +26,20 @@ const STACK_INIT_TOP_PAGE: Page<Size4KiB> = Page::containing_address(VirtAddr::n
 // kernel stack
 pub const KSTACK_MAX: u64 = 0xffff_ff02_0000_0000;
 pub const KSTACK_DEF_BOT: u64 = KSTACK_MAX - STACK_MAX_SIZE;
-pub const KSTACK_DEF_PAGE: u64 = 512; // Default: 512 pages (2 MiB), see boot.conf
+pub const KSTACK_DEF_PAGE: u64 = 8; // Initially mapped kernel stack pages.
 pub const KSTACK_DEF_SIZE: u64 = KSTACK_DEF_PAGE * crate::memory::PAGE_SIZE;
 
 pub const KSTACK_INIT_BOT: u64 = KSTACK_MAX - KSTACK_DEF_SIZE;
 pub const KSTACK_INIT_TOP: u64 = KSTACK_MAX - 8;
 
 const KSTACK_INIT_PAGE: Page<Size4KiB> = Page::containing_address(VirtAddr::new(KSTACK_INIT_BOT));
-const KSTACK_INIT_TOP_PAGE: Page<Size4KiB> =
-    Page::containing_address(VirtAddr::new(KSTACK_INIT_TOP));
+const KSTACK_END_PAGE: Page<Size4KiB> = Page::containing_address(VirtAddr::new(KSTACK_MAX));
 
 #[derive(Clone, Copy)]
 pub struct Stack {
     pub(super) range: PageRange<Size4KiB>,
     usage: u64,
+    user_access: bool,
 }
 
 impl Stack {
@@ -59,11 +58,13 @@ impl Stack {
         };
         self.range = elf::map_range(stack_bot, STACK_DEF_PAGE, mapper, alloc, flags).unwrap();
         self.usage = STACK_DEF_PAGE;
+        self.user_access = user_access;
     }
     pub fn new(top: Page, size: u64) -> Self {
         Self {
             range: Page::range(top - size + 1, top + 1),
             usage: size,
+            user_access: true,
         }
     }
 
@@ -71,13 +72,15 @@ impl Stack {
         Self {
             range: Page::range(STACK_INIT_TOP_PAGE, STACK_INIT_TOP_PAGE),
             usage: 0,
+            user_access: true,
         }
     }
 
     pub const fn kstack() -> Self {
         Self {
-            range: Page::range(KSTACK_INIT_PAGE, KSTACK_INIT_TOP_PAGE),
+            range: Page::range(KSTACK_INIT_PAGE, KSTACK_END_PAGE),
             usage: KSTACK_DEF_PAGE,
+            user_access: false,
         }
     }
 
@@ -86,6 +89,7 @@ impl Stack {
         let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE;
         self.range = elf::map_range(STACK_INIT_BOT, STACK_DEF_PAGE, mapper, alloc, flags).unwrap();
         self.usage = STACK_DEF_PAGE;
+        self.user_access = true;
     }
 
     pub fn handle_page_fault(
@@ -124,7 +128,6 @@ impl Stack {
     ) -> Result<(), MapToError<Size4KiB>> {
         debug_assert!(self.is_on_stack(addr), "Address is not on stack.");
 
-        // FIXME: grow stack for page fault
         let fault_page = Page::containing_address(addr);
 
         let current_bot = self.range.start;
@@ -141,7 +144,10 @@ impl Stack {
             return Err(MapToError::FrameAllocationFailed);
         }
         
-        let flags = PageTableFlags::PRESENT | PageTableFlags ::WRITABLE | PageTableFlags :: USER_ACCESSIBLE;
+        let mut flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
+        if self.user_access {
+            flags |= PageTableFlags::USER_ACCESSIBLE;
+        }
         
         for page in Page::range(fault_page,current_bot){
             let frame = alloc.allocate_frame().ok_or(MapToError::FrameAllocationFailed)?;
@@ -159,6 +165,21 @@ impl Stack {
 
     pub fn memory_usage(&self) -> u64 {
         self.usage * crate::memory::PAGE_SIZE
+    }
+
+    pub(super) fn clean_up(
+        &mut self,
+        mapper: MapperRef,
+        dealloc: FrameAllocatorRef,
+    ) -> Result<(), UnmapError> {
+        if self.usage == 0 {
+            return Ok(());
+        }
+
+        let range = Page::range_inclusive(self.range.start, self.range.end - 1);
+        elf::unmap_range(range, mapper, dealloc, true)?;
+        *self = Self::empty();
+        Ok(())
     }
 
     pub fn fork(&self, mapper: MapperRef, alloc: FrameAllocatorRef, stack_offset_count: u64,)
@@ -208,7 +229,11 @@ impl Stack {
         }
         }
 
-        Self { range: new_range, usage: self.usage,}
+        Self {
+            range: new_range,
+            usage: self.usage,
+            user_access: self.user_access,
+        }
     }
 }
 

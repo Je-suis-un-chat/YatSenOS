@@ -459,9 +459,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "yylib"
+name = "yslib"
 version = "0.4.0"
 dependencies = [
+ "chrono",
+ "linked_list_allocator",
  "yyos_syscall",
 ]
 
@@ -481,14 +483,14 @@ dependencies = [
 name = "yyos_counter"
 version = "0.4.0"
 dependencies = [
- "yylib",
+ "yslib",
 ]
 
 [[package]]
 name = "yyos_dinner"
 version = "0.4.0"
 dependencies = [
- "yylib",
+ "yslib",
 ]
 
 [[package]]
@@ -504,28 +506,28 @@ dependencies = [
 name = "yyos_factorial"
 version = "0.4.0"
 dependencies = [
- "yylib",
+ "yslib",
 ]
 
 [[package]]
 name = "yyos_fish"
 version = "0.4.0"
 dependencies = [
- "yylib",
+ "yslib",
 ]
 
 [[package]]
 name = "yyos_fork"
 version = "0.4.0"
 dependencies = [
- "yylib",
+ "yslib",
 ]
 
 [[package]]
 name = "yyos_hello"
 version = "0.4.0"
 dependencies = [
- "yylib",
+ "yslib",
 ]
 
 [[package]]
@@ -558,14 +560,14 @@ dependencies = [
 name = "yyos_mq"
 version = "0.4.0"
 dependencies = [
- "yylib",
+ "yslib",
 ]
 
 [[package]]
 name = "yyos_shell"
 version = "0.4.0"
 dependencies = [
- "yylib",
+ "yslib",
 ]
 
 [[package]]

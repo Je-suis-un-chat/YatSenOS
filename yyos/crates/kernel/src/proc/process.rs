@@ -1,11 +1,10 @@
-use alloc::{fmt::format, sync::{Arc, Weak}, vec::Vec};
+use alloc::{sync::{Arc, Weak}, vec::Vec};
 
 use spin::*;
-use x86_64::structures::paging::{mapper::MapToError, page::PageRange, *};
 use xmas_elf::ElfFile;
 
 use super::*;
-use crate::{memory::*, proc::vm::stack::{STACK_MAX_SIZE, STACK_START_MASK}};
+use crate::proc::vm::stack::{STACK_MAX_SIZE, STACK_START_MASK};
 use context::*;
 
 
@@ -171,24 +170,29 @@ impl ProcessInner {
         self.proc_vm.as_mut().unwrap()
     }
 
-    pub fn handle_page_fault(&mut self, addr: VirtAddr, err_code: PageFaultErrorCode) -> bool {
-        self.vm_mut().handle_page_fault(addr, err_code)
+    pub fn brk(&self, addr: Option<VirtAddr>) -> Option<VirtAddr> {
+        self.vm().brk(addr)
+    }
+
+    pub fn memory_usage(&self) -> u64 {
+        self.proc_vm.as_ref().map_or(0, ProcessVm::memory_usage)
+    }
+
+    pub fn handle_page_fault(&mut self, addr: VirtAddr, _err_code: PageFaultErrorCode) -> bool {
+        self.vm_mut().handle_page_fault(addr)
     }
 
     /// Save the process's context
     /// mark the process as ready
     pub(super) fn save(&mut self, context: &ProcessContext) {
-        // FIXME: save the process's context
         self.context=*context;
     }
 
     /// Restore the process's context
     /// mark the process as running
     pub(super) fn restore(&mut self, context: &mut ProcessContext) {
-        // FIXME: restore the process's context
         self.context.restore(context);
 
-        // FIXME: restore the process's page table
         self.proc_vm.as_ref().unwrap().page_table.load();
 
         self.status = ProgramStatus::Running;
@@ -203,11 +207,8 @@ impl ProcessInner {
     }
 
     pub fn kill(&mut self, ret: isize) {
-        // FIXME: set exit code
         self.exit_code = Some(ret);
-        // FIXME: set status to dead
         self.status = ProgramStatus::Dead;
-        // FIXME: take and drop unused resources
         trace!(
             "Process {} killed with exit code {}",
             self.name,
@@ -226,9 +227,8 @@ impl ProcessInner {
             self.proc_data.take(),
         )
     }
-    pub fn load_elf(&mut self, elf: &ElfFile)
-    {
-        // NOT NEEDED: elf_load is now handled in manager.rs `spawn` by calling `elf::load_elf`
+    pub fn load_elf(&mut self, elf: &ElfFile) {
+        self.vm_mut().load_elf(elf);
     }
 
     pub fn fork(&mut self, parent: Weak<Process>, stack_offset_count: u64,)
@@ -292,12 +292,15 @@ impl core::ops::DerefMut for ProcessInner {
 impl core::fmt::Debug for Process {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         let inner = self.inner.read();
+        let (memory_size, memory_unit) = crate::humanized_size(inner.memory_usage());
+
         f.debug_struct("Process")
             .field("pid", &self.pid)
             .field("name", &inner.name)
             .field("parent", &inner.parent().map(|p| p.pid))
             .field("status", &inner.status)
             .field("ticks_passed", &inner.ticks_passed)
+            .field("memory_usage", &format!("{:.3} {}", memory_size, memory_unit))
             .field("children", &inner.children.iter().map(|c| c.pid.0))
             .field("status", &inner.status)
             .field("context", &inner.context)
@@ -309,13 +312,17 @@ impl core::fmt::Debug for Process {
 impl core::fmt::Display for Process {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         let inner = self.inner.read();
+        let (memory_size, memory_unit) = crate::humanized_size_short(inner.memory_usage());
+
         write!(
             f,
-            " #{:-3} | #{:-3} | {:12} | {:7} | {:?}",
+            " #{:-3} | #{:-3} | {:12} | {:7} | {:>7.2} {:<3} | {:?}",
             self.pid.0,
             inner.parent().map(|p| p.pid.0).unwrap_or(0),
             inner.name,
             inner.ticks_passed,
+            memory_size,
+            memory_unit,
             inner.status
         )?;
         Ok(())

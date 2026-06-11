@@ -1,13 +1,20 @@
 #![no_std]
 
+extern crate alloc;
+
 #[macro_use]
 extern crate log;
 
+use alloc::vec::Vec;
 use core::ptr::{copy_nonoverlapping, write_bytes};
 
 use x86_64::{
-    PhysAddr, VirtAddr, align_up,
-    structures::paging::{mapper::*, page::PageRange, *},
+    PhysAddr, VirtAddr,
+    structures::paging::{
+        mapper::*,
+        page::{PageRange, PageRangeInclusive},
+        *,
+    },
 };
 use xmas_elf::{ElfFile, program};
 
@@ -75,20 +82,29 @@ pub fn load_elf(
     physical_offset: u64,
     page_table: &mut impl Mapper<Size4KiB>,
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-    user_access: bool
-) -> Result<(), MapToError<Size4KiB>> {
+    user_access: bool,
+) -> Result<Vec<PageRangeInclusive>, MapToError<Size4KiB>> {
     trace!("Loading ELF file... (user_access={})", user_access);
 
-    
+    let mut ranges = Vec::new();
 
     for segment in elf.program_iter() {
         if segment.get_type().unwrap() != program::Type::Load {
             continue;
         }
-        load_segment(elf, physical_offset, &segment, page_table, frame_allocator, user_access)?
+        if let Some(range) = load_segment(
+            elf,
+            physical_offset,
+            &segment,
+            page_table,
+            frame_allocator,
+            user_access,
+        )? {
+            ranges.push(range);
+        }
     }
 
-    Ok(())
+    Ok(ranges)
 }
 
 /// Load & Map ELF segment
@@ -98,12 +114,16 @@ fn load_segment(
     segment: &program::ProgramHeader,
     page_table: &mut impl Mapper<Size4KiB>,
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-    user_access: bool
-) -> Result<(), MapToError<Size4KiB>> {
+    user_access: bool,
+) -> Result<Option<PageRangeInclusive>, MapToError<Size4KiB>> {
     let virt_start_addr = VirtAddr::new(segment.virtual_addr());
     let mem_size = segment.mem_size();
     let file_size = segment.file_size();
     let file_offset = segment.offset();
+
+    if mem_size == 0 {
+        return Ok(None);
+    }
 
     // 1. 确定权限位
     let mut page_table_flags = PageTableFlags::PRESENT;
@@ -114,11 +134,14 @@ fn load_segment(
         page_table_flags |= PageTableFlags::NO_EXECUTE;
     }
 
-    if user_access{
+    if user_access {
         page_table_flags |= PageTableFlags::USER_ACCESSIBLE;
     }
 
-    trace!("Mapping segment at {:?} with flags {:?}", virt_start_addr, page_table_flags);
+    trace!(
+        "Mapping segment at {:?} with flags {:?}",
+        virt_start_addr, page_table_flags
+    );
 
     // 2. 计算涉及的页面范围（按 4KiB 对齐）
     let start_page = Page::containing_address(virt_start_addr);
@@ -143,7 +166,7 @@ fn load_segment(
         // 3. 拷贝数据与清零逻辑
         // 目标地址计算：利用物理内存偏移量访问刚刚映射的物理帧
         let dest_ptr = (frame.start_address().as_u64() + physical_offset) as *mut u8;
-        
+
         // 计算当前页在段内的偏移
         let page_offset = idx as u64 * 4096;
 
@@ -159,12 +182,37 @@ fn load_segment(
 
                 // 如果该页没填满（文件数据结束但内存段没结束），清零剩余部分
                 if copy_len < 4096 {
-                    write_bytes(dest_ptr.add(copy_len as usize), 0, (4096 - copy_len) as usize);
+                    write_bytes(
+                        dest_ptr.add(copy_len as usize),
+                        0,
+                        (4096 - copy_len) as usize,
+                    );
                 }
             } else {
                 // 纯 BSS 部分，整页清零
                 write_bytes(dest_ptr, 0, 4096);
             }
+        }
+    }
+
+    Ok(Some(Page::range_inclusive(start_page, end_page)))
+}
+
+pub fn unmap_range(
+    range: PageRangeInclusive,
+    page_table: &mut impl Mapper<Size4KiB>,
+    frame_deallocator: &mut impl FrameDeallocator<Size4KiB>,
+    flush: bool,
+) -> Result<(), UnmapError> {
+    for page in range {
+        let (frame, flusher) = page_table.unmap(page)?;
+        unsafe {
+            frame_deallocator.deallocate_frame(frame);
+        }
+        if flush {
+            flusher.flush();
+        } else {
+            flusher.ignore();
         }
     }
 

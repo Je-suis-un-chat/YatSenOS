@@ -35,9 +35,15 @@ pub fn sys_read(fd: u8, buf: &mut [u8]) -> Option<usize> {
 }
 
 #[inline(always)]
+pub fn sys_brk(addr: Option<usize>) -> Option<usize> {
+    match syscall!(Syscall::Brk, addr.unwrap_or(0)) {
+        usize::MAX => None,
+        ret => Some(ret),
+    }
+}
+
+#[inline(always)]
 pub fn sys_wait_pid(pid: u16) -> isize {
-    // FIXME: try to get the return value for process
-    //        loop until the process is finished
     loop{
         let ret = syscall!(Syscall::WaitPid, pid as u64) as isize;
         if ret != -1{

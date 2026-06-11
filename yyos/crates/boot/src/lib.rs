@@ -12,7 +12,7 @@ pub use uefi::{
 use x86_64::{
     VirtAddr,
     registers::control::Cr3,
-    structures::paging::{OffsetPageTable, PageTable},
+    structures::paging::{OffsetPageTable, PageTable, page::PageRangeInclusive},
 };
 
 pub mod allocator;
@@ -27,6 +27,8 @@ extern crate log;
 
 /// This structure represents the information that the bootloader passes to the
 /// kernel.
+pub type KernelPages = ArrayVec<PageRangeInclusive, 16>;
+
 pub struct BootInfo {
     /// The memory map
     pub memory_map: ArrayVec<MemoryDescriptor, 256>,
@@ -37,6 +39,9 @@ pub struct BootInfo {
 
     /// The system table virtual address
     pub system_table: NonNull<core::ffi::c_void>,
+
+    /// Pages occupied by loadable kernel ELF segments.
+    pub kernel_pages: KernelPages,
 
     /// Loaded apps
     pub loaded_apps: Option<AppList>,

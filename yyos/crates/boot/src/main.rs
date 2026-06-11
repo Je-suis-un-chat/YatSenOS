@@ -59,17 +59,32 @@ fn efi_main() -> Status {
         &mut frame_allocator,
     );
 
-    elf::load_elf(
+    let kernel_pages = elf::load_elf(
         &elf,
         config.physical_memory_offset,
         &mut page_table,
         &mut frame_allocator,
         false, // Kernel is not user accessible
-    ).expect("Failed to load and map ELF segments");
+    )
+    .expect("Failed to load and map ELF segments")
+    .into_iter()
+    .collect();
+
+    assert!(
+        config.kernel_stack_auto_grow <= config.kernel_stack_size,
+        "kernel_stack_auto_grow exceeds kernel_stack_size"
+    );
+    let (stack_start, stack_size) = if config.kernel_stack_auto_grow > 0 {
+        let init_size = config.kernel_stack_auto_grow;
+        let bottom_offset = (config.kernel_stack_size - init_size) * 0x1000;
+        (config.kernel_stack_address + bottom_offset, init_size)
+    } else {
+        (config.kernel_stack_address, config.kernel_stack_size)
+    };
 
     elf::map_range(
-        config.kernel_stack_address,
-        config.kernel_stack_size,
+        stack_start,
+        stack_size,
         &mut page_table,
         &mut frame_allocator,
         x86_64::structures::paging::PageTableFlags::PRESENT | x86_64::structures::paging::PageTableFlags::WRITABLE,
@@ -101,6 +116,7 @@ fn efi_main() -> Status {
         memory_map: mmap_owned.entries().copied().collect(),
         physical_memory_offset: config.physical_memory_offset,
         system_table,
+        kernel_pages,
         loaded_apps,
     };
 

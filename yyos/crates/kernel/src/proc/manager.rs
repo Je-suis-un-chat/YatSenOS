@@ -1,13 +1,11 @@
 use alloc::{collections::*, format, sync::{Arc, Weak}, string::String};
 use xmas_elf::ElfFile;
-use boot::entry_point;
 use hashbrown::HashMap;
 use spin::{Mutex, RwLock};
-use x86::{apic::DestinationMode::Physical, current};
-use x86_64::{VirtAddr, registers::control::Cr3};
+use x86_64::VirtAddr;
 use super::*;
 use crate::memory::{
-    self, PAGE_SIZE,
+    PAGE_SIZE,
     allocator::{ALLOCATOR, HEAP_SIZE},
     get_frame_alloc_for_sure,
 };
@@ -18,9 +16,7 @@ use crate::utils::macros::*;
 pub static PROCESS_MANAGER: spin::Once<ProcessManager> = spin::Once::new();
 
 pub fn init(init: Arc<Process>, app_list: Option<boot::AppList>) {
-    // FIXME: set init process as Running
     init.write().resume();
-    // FIXME: set processor's current pid to init's pid
     processor::set_pid(init.pid());
     PROCESS_MANAGER.call_once(|| ProcessManager::new(init, app_list));
 }
@@ -90,9 +86,7 @@ impl ProcessManager {
     }
 
     pub fn save_current(&self, context: &ProcessContext) {
-        // FIXME: update current process's tick count
         let cur = self.current();
-        // FIXME: save current process's context
         cur.write().tick();
         cur.write().save(context);
         cur.write().pause();
@@ -152,13 +146,9 @@ impl ProcessManager {
         // alloc stack for the new process base on pid
         let stack_top = proc.alloc_init_stack();
         let pid = proc.pid();
-        // FIXME: set the stack frame
         proc.write().init_stack_frame(entry, stack_top);
-        // FIXME: add to process map
         self.add_proc(pid, proc);
-        // FIXME: push to ready queue
         self.push_ready(pid);
-        // FIXME: return new process pid
         pid
     } */
 
@@ -167,7 +157,6 @@ impl ProcessManager {
     }
 
     pub fn handle_page_fault(&self, addr: VirtAddr, err_code: PageFaultErrorCode) -> bool {
-        // FIXME: handle page fault
         // 1. 检查保留位违规 - 硬件错误或严重问题
         if err_code.contains(PageFaultErrorCode::MALFORMED_TABLE) {
             return false;
@@ -191,7 +180,10 @@ impl ProcessManager {
         }
 
         let current = self.current();
-    
+        if current.pid() == KERNEL_PID {
+            info!("Page fault on kernel at {:#x}", addr);
+        }
+
         if current.write().handle_page_fault(addr, err_code) {
         return true; // 成功处理 - 预期异常（如栈增长）
         }
@@ -222,13 +214,27 @@ impl ProcessManager {
     }
 
     pub fn print_process_list(&self) {
-        let mut output = String::from("  PID | PPID | Process Name |  Ticks  | Status\n");
+        let mut output = String::from("  PID | PPID | Process Name |  Ticks  |   Memory    | Status\n");
 
         self.processes
             .read()
             .values()
             .filter(|p| p.read().status() != ProgramStatus::Dead)
             .for_each(|p| output += format!("{}\n", p).as_str());
+
+        let frame_alloc = get_frame_alloc_for_sure();
+        let frames_used = frame_alloc.frames_used();
+        let frames_recycled = frame_alloc.frames_recycled();
+        let frames_total = frame_alloc.frames_total();
+        let memory_used = frames_used.saturating_sub(frames_recycled) * PAGE_SIZE as usize;
+        let memory_total = frames_total * PAGE_SIZE as usize;
+        output += &format_usage("Memory", memory_used, memory_total);
+        output += format!(
+            "Frames : {} used, {} recycled, {} total\n",
+            frames_used, frames_recycled, frames_total
+        )
+        .as_str();
+        drop(frame_alloc);
 
         // print memory usage of kernel heap
         let heap_used = ALLOCATOR.lock().used();
@@ -264,24 +270,11 @@ impl ProcessManager {
     let proc_vm = Some(ProcessVm::new(page_table));
     let proc = Process::new(name, parent, proc_vm, proc_data);
 
-    // Phase 1: Load ELF into process address space.
-    // Use a block scope to ensure all guards (inner RwLockWriteGuard, mapper,
-    // frame_alloc MutexGuard) are dropped before Phase 2.
-    // This prevents deadlock: alloc_init_stack() in Phase 2 needs both
-    // the Process RwLock write guard AND the FRAME_ALLOCATOR MutexGuard,
-    // which would deadlock if we still hold either of them here.
-    let entry_point;
-    {
+    let entry_point = {
         let mut inner = proc.write();
-        let mapper = &mut inner.vm_mut().page_table.mapper();
-        let frame_alloc = &mut *get_frame_alloc_for_sure();
-        let physical_offset = *crate::memory::PHYSICAL_OFFSET.get().unwrap();
-
-        elf::load_elf(elf, physical_offset, mapper, frame_alloc, true)
-            .expect("Failed to load ELF for new process");
-
-        entry_point = VirtAddr::new(elf.header.pt2.entry_point());
-    } // inner, mapper, frame_alloc (and its MutexGuard) all dropped here
+        inner.load_elf(elf);
+        VirtAddr::new(elf.header.pt2.entry_point())
+    };
 
     // Phase 2: Allocate and initialize stack (locks are now free)
     let stack_top = proc.alloc_init_stack();
@@ -291,7 +284,6 @@ impl ProcessManager {
     trace!("New {:#?}", &proc);
 
     let pid = proc.pid();
-    // FIXME: something like kernel thread
     self.add_proc(pid, proc);
     self.push_ready(pid);
     pid
@@ -366,4 +358,19 @@ impl ProcessManager {
     }
 
 
+}
+
+fn format_usage(name: &str, used: usize, total: usize) -> String {
+    let (used_size, used_unit) = crate::humanized_size(used as u64);
+    let (total_size, total_unit) = crate::humanized_size(total as u64);
+    let percentage = if total == 0 {
+        0.0
+    } else {
+        used as f64 * 100.0 / total as f64
+    };
+
+    format!(
+        "{:<6} : {:>6.2} {:>3} / {:>6.2} {:>3} ({:>5.2}%)\n",
+        name, used_size, used_unit, total_size, total_unit, percentage
+    )
 }
